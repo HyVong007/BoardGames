@@ -9,16 +9,16 @@ using History = BoardGames.History<BoardGames.KingChess.Color, BoardGames.KingCh
 
 namespace BoardGames.KingChess
 {
-	public enum PieceName
+	public enum Color
 	{
-		Pawn = 0, Rook = 1, Bishop = 2, Knight = 3, Queen = 4, King = 5
+		White = 0, Black = 1
 	}
 
 
 
-	public enum Color
+	public enum PieceName
 	{
-		White = 0, Black = 1
+		Pawn = 0, Rook = 1, Bishop = 2, Knight = 3, Queen = 4, King = 5
 	}
 
 
@@ -76,7 +76,7 @@ namespace BoardGames.KingChess
 			this.promotedName = null;
 
 			if (capturedName == PieceName.Rook)
-				capturedRookHistory = core.rookHistory[playerID.Opponent()][to];
+				capturedRookHistory = core.rookHistory[1 - playerID][to];
 			else capturedRookHistory = (false, -1);
 
 			if (name == PieceName.Pawn)
@@ -101,8 +101,8 @@ namespace BoardGames.KingChess
 			}
 			else if (name == PieceName.King && core.kingHistory[playerID] == (false, 0))
 				castling = playerID == Color.White ?
-					(to == 6 ? MoveData.Castling.Near : to == 2 ? MoveData.Castling.Far : MoveData.Castling.None)
-					: (to == 62 ? MoveData.Castling.Near : to == 58 ? MoveData.Castling.Far : MoveData.Castling.None);
+					(to == 6 ? Castling.Near : to == 2 ? Castling.Far : Castling.None)
+					: (to == 62 ? Castling.Near : to == 58 ? Castling.Far : Castling.None);
 		}
 
 
@@ -288,7 +288,7 @@ namespace BoardGames.KingChess
 		private bool KingIsChecked(Color playerID, MoveData latestMoveData)
 		{
 			ulong king = bitboards[playerID][PieceName.King];
-			var opponentColor = playerID.Opponent();
+			var opponentColor = 1 - playerID;
 			for (int pn = 0; pn < 6; ++pn)
 				if ((king & FindPseudoLegalMoves(opponentColor, (PieceName)pn, latestMoveData)) != 0) return true;
 			return false;
@@ -469,7 +469,7 @@ namespace BoardGames.KingChess
 			if (SOURCE == 0) return 0UL;
 			ulong result = 0UL;
 			ulong EMPTY = empty;
-			ulong OPPONENT = this[playerID.Opponent()];
+			ulong OPPONENT = this[1 - playerID];
 			ulong EMPTY_OR_OPPONENT = EMPTY | OPPONENT;
 
 			switch (name)
@@ -706,9 +706,9 @@ namespace BoardGames.KingChess
 			};
 
 
-		public void Move(MoveData data, History.Mode mode)
+		public void Move(in MoveData data, MoveType mode)
 		{
-			bool undo = mode == History.Mode.Undo;
+			bool undo = mode == MoveType.Undo;
 			PseudoMove(data, undo);
 
 			#region Cập nhật {kingHistory}
@@ -724,7 +724,7 @@ namespace BoardGames.KingChess
 			}
 			#endregion
 
-			var opponentColor = ((Color)data.playerID).Opponent();
+			var opponentColor = 1 - data.playerID;
 
 			#region Cập nhật {rookHistory}
 			var myRH = rookHistory[(Color)data.playerID];
@@ -824,10 +824,10 @@ namespace BoardGames.KingChess
 		/// Đi 1 nước/ Hủy 1 nước. Chỉ tác động đến <see cref="bitboards"/> và <see cref="mailBox"/>
 		/// <para>Có thể dùng để test và hủy nước đi sau khi test.</para>
 		/// </summary>
-		private void PseudoMove(MoveData data, bool undo)
+		private void PseudoMove(in MoveData data, bool undo)
 		{
-			ulong PIECE = bitboards[(Color)data.playerID][data.name];
-			ulong OPPONENT_PIECE = data.capturedName != null ? bitboards[((Color)data.playerID).Opponent()][data.capturedName.Value] : 0UL;
+			ulong PIECE = bitboards[data.playerID][data.name];
+			ulong OPPONENT_PIECE = data.capturedName != null ? bitboards[1 - data.playerID][data.capturedName.Value] : 0UL;
 			var from = data.from.ToMailBoxIndex();
 			var to = data.to.ToMailBoxIndex();
 
@@ -889,12 +889,12 @@ namespace BoardGames.KingChess
 						var bitIndex = data.enpassantCapturedIndex.Value;
 						OPPONENT_PIECE = OPPONENT_PIECE.SetBit(bitIndex);
 						var index = bitIndex.ToMailBoxIndex();
-						mailBox[index.x][index.y] = (((Color)data.playerID).Opponent(), PieceName.Pawn);
+						mailBox[index.x][index.y] = (1 - data.playerID, PieceName.Pawn);
 					}
 					else
 					{
 						OPPONENT_PIECE = OPPONENT_PIECE.SetBit(data.to);
-						mailBox[to.x][to.y] = (((Color)data.playerID).Opponent(), data.capturedName.Value);
+						mailBox[to.x][to.y] = (1 - data.playerID, data.capturedName.Value);
 					}
 				}
 				else mailBox[to.x][to.y] = null;
@@ -914,7 +914,7 @@ namespace BoardGames.KingChess
 			}
 
 			bitboards[(Color)data.playerID][data.name] = PIECE;
-			if (data.capturedName != null) bitboards[((Color)data.playerID).Opponent()][data.capturedName.Value] = OPPONENT_PIECE;
+			if (data.capturedName != null) bitboards[1 - data.playerID][data.capturedName.Value] = OPPONENT_PIECE;
 		}
 		#endregion
 	}
@@ -994,6 +994,7 @@ namespace BoardGames.KingChess
 				++count;
 				u &= u - 1;
 			}
+
 			return count;
 		}
 
@@ -1036,7 +1037,7 @@ namespace BoardGames.KingChess
 
 
 		#region Bit1_To_Index
-		private static readonly List<int> listInt = new List<int>(64);
+		private static readonly List<int> listInt = new(64);
 
 		/// <summary>
 		/// Chuyển tọa độ các bit 1 sang tọa độ Bit Index.
@@ -1064,8 +1065,9 @@ namespace BoardGames.KingChess
 				chars[index++] = INT_CHAR[u % 2];
 				u /= 2;
 			}
+
 			Array.Reverse(chars);
-			return new string(chars);
+			return new(chars);
 		}
 
 
@@ -1082,6 +1084,7 @@ namespace BoardGames.KingChess
 				Console.Write(c);
 				if (i < bin.Length - 1 && (i + 1) % 4 == 0) Console.Write('_');
 			}
+
 			Console.ForegroundColor = ConsoleColor.White;
 			Console.WriteLine();
 		}
@@ -1120,8 +1123,10 @@ namespace BoardGames.KingChess
 					Console.ForegroundColor = c == '1' ? ConsoleColor.Red : ConsoleColor.White;
 					Console.Write($"  {c}  ");
 				}
+
 				Console.Write("\n\n");
 			}
+
 			Console.ForegroundColor = ConsoleColor.DarkRed;
 			Console.WriteLine("\n     A    B    C    D    E    F    G    H    ");
 			Console.ForegroundColor = ConsoleColor.White;
@@ -1145,8 +1150,10 @@ namespace BoardGames.KingChess
 						Console.ForegroundColor = ConsoleColor.White;
 						Console.Write("   0   ");
 					}
+
 				Console.WriteLine("\n\n");
 			}
+
 			Console.ForegroundColor = ConsoleColor.Green;
 			Console.WriteLine("\n\n	   A      B      C      D      E      F      G      H      I");
 			Console.ForegroundColor = ConsoleColor.White;
@@ -1162,7 +1169,7 @@ namespace BoardGames.KingChess
 
 
 		#region Bit1_To_MailBox
-		private static readonly List<Vector2Int> listXY = new List<Vector2Int>(64);
+		private static readonly List<Vector2Int> listXY = new(64);
 
 		/// <summary>
 		/// Chuyển tọa độ các bit 1 sang tọa độ MailBox.
@@ -1174,12 +1181,5 @@ namespace BoardGames.KingChess
 			return listXY.ToArray();
 		}
 		#endregion
-
-
-		/// <summary>
-		/// Lấy màu ngược với màu nhập vào.
-		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static Color Opponent(this Color color) => (Color)(1 - (int)color);
 	}
 }

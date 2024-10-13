@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Runtime.CompilerServices;
 using UnityEngine;
-using History = BoardGames.History<BoardGames.GOChess.Color, BoardGames.GOChess.MoveData>;
 
 
 namespace BoardGames.GOChess
@@ -29,15 +27,19 @@ namespace BoardGames.GOChess
 		/// CHÚ Ý: Các lổ thở của 1 land có thể trùng nhau và các land có thể có chung các lổ thở !
 		/// </summary>
 		public int airHole;
-		public readonly List<Vector2Int> indexes = new List<Vector2Int>();
+		public readonly List<Vector2Int> indexes = new();
 
 
 		public Land(in Color color) => this.color = color;
+
+
 		public Land(Land land) : this(land.color)
 		{
 			airHole = land.airHole;
 			indexes.AddRange(land.indexes);
 		}
+
+
 		public override string ToString() => $"({color}, airHole= {airHole}, indexes.Count= {indexes.Count}), ";
 	}
 
@@ -51,7 +53,7 @@ namespace BoardGames.GOChess
 		public readonly IReadOnlyDictionary<Color, IReadOnlyDictionary<Land, byte>> color_land_point;
 
 
-		public MoveData(Core core, in Color color, in Vector2Int index)
+		public MoveData(Core core, Color color, in Vector2Int index)
 		{
 			playerID = color;
 			this.index = index;
@@ -74,7 +76,7 @@ namespace BoardGames.GOChess
 		}
 
 
-		public MoveData(in Color playerID, in Vector2Int index, in byte emptyHole, IReadOnlyDictionary<Color, IReadOnlyDictionary<Land, byte>> color_land_point)
+		public MoveData(Color playerID, in Vector2Int index, byte emptyHole, IReadOnlyDictionary<Color, IReadOnlyDictionary<Land, byte>> color_land_point)
 		{
 			this.playerID = playerID;
 			this.index = index;
@@ -84,7 +86,7 @@ namespace BoardGames.GOChess
 
 
 		public override string ToString() =>
-			$"data: ({(Color)playerID}, index= {index}, emptyHole= {emptyHole}, ally count= {color_land_point[(Color)playerID].Count}, enemy count= {color_land_point[(Color)(1 - playerID)].Count}), ";
+			$"data: ({playerID}, index= {index}, emptyHole= {emptyHole}, ally count= {color_land_point[playerID].Count}, enemy count= {color_land_point[1 - playerID].Count}), ";
 	}
 
 
@@ -109,36 +111,34 @@ namespace BoardGames.GOChess
 		{
 			if (size.x < 2 || size.y < 2) throw new ArgumentOutOfRangeException($"Size phải >= (2, 2). size= {size}");
 			if (size.x > 100 || size.y > 100) throw new OutOfMemoryException($"Size quá lớn. size= {size}");
-			mailBox = new Land[size.x][];
-			for (int x = 0; x < size.x; ++x) mailBox[x] = new Land[size.y];
+			mailBox = Util.NewArray<Land>(size.x, size.y);
 			rect = new Rect(0, 0, size.x, size.y);
 		}
 
 
 		public Core(Color?[][] mailBox) : this(new Vector2Int(mailBox.Length, mailBox[0].Length))
 		{
-			var index = new Vector2Int();
-			for (index.x = 0; index.x < rect.width; ++index.x)
-				for (index.y = 0; index.y < rect.height; ++index.y)
-					if (mailBox[index.x][index.y] != null)
-						Move(new MoveData(this, mailBox[index.x][index.y].Value, index), History.Mode.Play);
+			for (int x = 0; x < rect.width; ++x)
+				for (int y = 0; y < rect.height; ++y)
+					if (mailBox[x][y] != null)
+						Move(new MoveData(this, mailBox[x][y].Value, new(x, y)), MoveType.Play);
 		}
 
 
 		public Land this[int x, int y] => mailBox[x][y];
-		public Land this[Vector2Int index] => mailBox[index.x][index.y];
+		public Land this[in Vector2Int index] => mailBox[index.x][index.y];
 		#endregion
 
 
 		#region State
-		private readonly Dictionary<Color, short> pieceCounts = new Dictionary<Color, short>
+		private readonly Dictionary<Color, short> pieceCounts = new()
 		{
 			[Color.White] = -1,
 			[Color.Black] = -1
 		};
 
 
-		public int PieceCount(Color color)
+		public short PieceCount(Color color)
 		{
 			if (pieceCounts[0] >= 0) return pieceCounts[color];
 
@@ -163,7 +163,7 @@ namespace BoardGames.GOChess
 		/// </summary>
 		public State Finish()
 		{
-			int w = PieceCount(Color.White), b = PieceCount(Color.Black);
+			short w = PieceCount(Color.White), b = PieceCount(Color.Black);
 			state = w > b ? State.White_Win : b > w ? State.Black_Win : State.Draw;
 			onFinished?.Invoke(state.Value);
 			return state.Value;
@@ -213,7 +213,6 @@ namespace BoardGames.GOChess
 
 		#region CanMove
 		/// <summary>
-		/// Temporary cache<br/>
 		/// point là số tiếp điểm của land với ô đang kiểm tra<br/>
 		/// </summary>
 		private readonly IReadOnlyDictionary<Color, Dictionary<Land, byte>> color_land_point = new Dictionary<Color, Dictionary<Land, byte>>
@@ -222,7 +221,8 @@ namespace BoardGames.GOChess
 			[Color.Black] = new Dictionary<Land, byte>()
 		};
 
-		public bool CanMove(in Color color, in Vector2Int index)
+
+		public bool CanMove(Color color, in Vector2Int index)
 		{
 			if (mailBox[index.x][index.y] != null) return false;
 
@@ -242,7 +242,7 @@ namespace BoardGames.GOChess
 			foreach (var ally_point in color_land_point[color])
 				if (ally_point.Key.airHole > ally_point.Value) return true;
 
-			foreach (var enemy_point in color_land_point[color.Opponent()])
+			foreach (var enemy_point in color_land_point[1 - color])
 				if (enemy_point.Key.airHole == enemy_point.Value) return true;
 
 			return false;
@@ -253,24 +253,26 @@ namespace BoardGames.GOChess
 		#region Move
 		public event Action<Vector3Int, Color> drawPieceGUI;
 		public event Action<Vector3Int> clearPieceGUI;
-
 		/// <summary>
 		/// point là số tiếp điểm của land với ô đang kiểm tra<br/>
 		/// </summary>
 		private readonly Dictionary<Land, byte> land_point = new();
-		public void Move(in MoveData data, History.Mode mode)
+
+
+		public void Move(in MoveData data, MoveType mode)
 		{
 			pieceCounts[Color.White] = pieceCounts[Color.Black] = -1;
 			land_point.Clear();
-			if (mode != History.Mode.Undo)
+
+			if (mode != MoveType.Undo)
 			{
 				#region DO
-				#region Tạo land mới vô bàn cờ và copy tất cả ally hiện tại, lấy ally hiện tại khỏi bàn cờ
-				var newLand = new Land((Color)data.playerID);
+				#region Gộp ally land hiện tại thành 1 land mới, xóa ally hiện tại khỏi bàn cờ
+				var newLand = new Land(data.playerID);
 				newLand.indexes.Add(data.index);
 				newLand.airHole = data.emptyHole;
 				lands[newLand.color].Add(newLand);
-				drawPieceGUI?.Invoke(data.index.ToVector3Int(), (Color)data.playerID);
+				drawPieceGUI?.Invoke(data.index.ToVector3Int(), data.playerID);
 
 				foreach (var ally_point in data.color_land_point[newLand.color])
 				{
@@ -287,11 +289,11 @@ namespace BoardGames.GOChess
 				#endregion
 
 				#region Trừ lổ thở của enemy land
-				foreach (var enemy_point in data.color_land_point[newLand.color.Opponent()])
+				foreach (var enemy_point in data.color_land_point[1 - newLand.color])
 				{
 					if ((enemy_point.Key.airHole -= enemy_point.Value) > 0) continue;
 
-					// enemy bị chết, lấy khỏi bàn cờ
+					// enemy bị chết, xoá khỏi bàn cờ
 					// xóa các quân cờ của enemy và tăng lổ thở cho các land xung quanh (nếu có, != enemy)
 					var enemy = enemy_point.Key;
 					lands[enemy.color].Remove(enemy);
@@ -304,8 +306,10 @@ namespace BoardGames.GOChess
 						{
 							var surround = index + DIRECTIONS[d];
 							if (!rect.Contains(surround)) continue;
+
 							var land = mailBox[surround.x][surround.y];
 							if (land == null || land == enemy) continue;
+
 							if (land_point.ContainsKey(land)) ++land_point[land];
 							else land_point[land] = 1;
 						}
@@ -319,11 +323,12 @@ namespace BoardGames.GOChess
 			else
 			{
 				#region UNDO
+				lands[data.playerID].Remove(mailBox[data.index.x][data.index.y]);
 				mailBox[data.index.x][data.index.y] = null;
 				clearPieceGUI?.Invoke(data.index.ToVector3Int());
 
 				#region Khôi phục ally land vào bàn cờ
-				foreach (var ally in data.color_land_point[(Color)data.playerID].Keys)
+				foreach (var ally in data.color_land_point[data.playerID].Keys)
 				{
 					lands[ally.color].Add(ally);
 					for (int i = ally.indexes.Count - 1; i >= 0; --i)
@@ -334,8 +339,8 @@ namespace BoardGames.GOChess
 				}
 				#endregion
 
-				#region Khôi phục lổ thở của  enemy land
-				foreach (var enemy_point in data.color_land_point[(Color)(1 - data.playerID)])
+				#region Khôi phục lổ thở của enemy land
+				foreach (var enemy_point in data.color_land_point[(1 - data.playerID)])
 				{
 					if ((enemy_point.Key.airHole += enemy_point.Value) > enemy_point.Value) continue;
 
@@ -352,8 +357,10 @@ namespace BoardGames.GOChess
 						{
 							var surround = index + DIRECTIONS[d];
 							if (!rect.Contains(surround)) continue;
+
 							var land = mailBox[surround.x][surround.y];
 							if (land == null || land == enemy) continue;
+
 							if (land_point.ContainsKey(land)) ++land_point[land];
 							else land_point[land] = 1;
 						}
@@ -366,16 +373,5 @@ namespace BoardGames.GOChess
 			}
 		}
 		#endregion
-	}
-
-
-
-	public static class Extensions
-	{
-		/// <summary>
-		/// Lấy màu ngược với màu nhập vào.
-		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static Color Opponent(this Color color) => (Color)(1 - (int)color);
 	}
 }

@@ -1,10 +1,8 @@
-﻿using System;
+﻿using NaughtyAttributes.Test;
+using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Runtime.CompilerServices;
-using System.Runtime.Serialization;
 using UnityEngine;
-using History = BoardGames.History<BoardGames.ChineseChess.Color, BoardGames.ChineseChess.MoveData>;
 
 
 namespace BoardGames.ChineseChess
@@ -28,15 +26,15 @@ namespace BoardGames.ChineseChess
 	}
 
 
-	[DataContract]
+
 	public readonly struct Piece
 	{
-		[DataMember] public readonly Color color;
-		[DataMember] public readonly PieceName name;
-		[DataMember] public readonly bool hidden;
+		public readonly Color color;
+		public readonly PieceName name;
+		public readonly bool hidden;
 
 
-		internal Piece(Color color, PieceName name, bool hidden = false)
+		public Piece(Color color, PieceName name, bool hidden = false)
 		{
 #if DEBUG
 			if (name == PieceName.General && hidden)
@@ -75,7 +73,6 @@ namespace BoardGames.ChineseChess
 		{ }
 
 
-
 		public override string ToString() => $"(piece= {piece}, from= {from}, to= {to}, capturedPiece= {capturedPiece})";
 	}
 
@@ -84,35 +81,35 @@ namespace BoardGames.ChineseChess
 	public sealed class Core
 	{
 		#region Khai báo dữ liệu và khởi tạo
-		private readonly Piece?[][] mailBox = new Piece?[9][];
+		private readonly Piece?[][] mailBox;
 		private static readonly Piece?[][] DEFAULT_MAILBOX = new Piece?[][]
 		{
 			// FILE A
-			new Piece?[]{new Piece(Color.Red, PieceName.Rook),null, null, new Piece(Color.Red,PieceName.Pawn), null, null, new Piece(Color.Black, PieceName.Pawn), null, null, new Piece(Color.Black, PieceName.Rook) },
+			new Piece?[] { new (Color.Red, PieceName.Rook), null, null, new (Color.Red, PieceName.Pawn), null, null, new (Color.Black, PieceName.Pawn), null, null, new (Color.Black, PieceName.Rook) },
 
 			// FILE B
-			new Piece?[]{ new Piece( Color.Red,PieceName.Horse ), null, new Piece( Color.Red,  PieceName.Cannon ), null, null, null, null, new Piece( Color.Black,  PieceName.Cannon ), null, new Piece( Color.Black,  PieceName.Horse ) },
+			new Piece?[] { new (Color.Red, PieceName.Horse), null, new (Color.Red, PieceName.Cannon), null, null, null, null, new (Color.Black, PieceName.Cannon), null, new (Color.Black, PieceName.Horse) },
 
 			// FILE C
-			new Piece?[]{ new Piece( Color.Red,  PieceName.Elephant ), null, null, new Piece( Color.Red, PieceName.Pawn ), null, null, new Piece( Color.Black,  PieceName.Pawn ), null, null, new Piece( Color.Black, PieceName.Elephant ) },
+			new Piece?[] { new (Color.Red, PieceName.Elephant), null, null, new (Color.Red, PieceName.Pawn), null, null, new (Color.Black, PieceName.Pawn), null, null, new (Color.Black, PieceName.Elephant) },
 
 			// FILE D
-			new Piece?[]{ new Piece(Color.Red,  PieceName.Advisor ), null, null, null, null, null, null, null, null, new Piece( Color.Black, PieceName.Advisor )},
+			new Piece?[] { new (Color.Red, PieceName.Advisor), null, null, null, null, null, null, null, null, new (Color.Black, PieceName.Advisor) },
 
 			// FILE E
-			new Piece?[]{ new Piece( Color.Red,  PieceName.General ), null, null, new Piece(Color.Red,  PieceName.Pawn ), null, null, new Piece( Color.Black,  PieceName.Pawn ), null, null, new Piece( Color.Black, PieceName.General )},
+			new Piece?[] { new (Color.Red, PieceName.General), null, null, new (Color.Red, PieceName.Pawn), null, null, new (Color.Black, PieceName.Pawn), null, null, new (Color.Black, PieceName.General) },
 
 			// FILE F
-			new Piece?[]{ new Piece( Color.Red,  PieceName.Advisor ), null, null, null, null, null, null, null, null, new Piece( Color.Black,  PieceName.Advisor ) },
+			new Piece?[] { new (Color.Red, PieceName.Advisor), null, null, null, null, null, null, null, null, new (Color.Black, PieceName.Advisor) },
 
 			// FILE G
-			new Piece?[]{ new Piece( Color.Red, PieceName.Elephant ), null, null, new Piece( Color.Red,  PieceName.Pawn ), null, null, new Piece(Color.Black, PieceName.Pawn ), null, null, new Piece( Color.Black, PieceName.Elephant ) },
+			new Piece?[] { new (Color.Red, PieceName.Elephant), null, null, new (Color.Red, PieceName.Pawn), null, null, new (Color.Black, PieceName.Pawn), null, null, new (Color.Black, PieceName.Elephant) },
 
 			// FILE H
-			new Piece?[]{ new Piece( Color.Red, PieceName.Horse ), null, new Piece( Color.Red,  PieceName.Cannon ), null, null, null, null, new Piece( Color.Black, PieceName.Cannon ), null, new Piece( Color.Black,  PieceName.Horse ) },
+			new Piece?[] { new (Color.Red, PieceName.Horse), null, new (Color.Red, PieceName.Cannon), null, null, null, null, new (Color.Black, PieceName.Cannon), null, new (Color.Black, PieceName.Horse) },
 
 			// FILE I
-			new Piece?[]{new Piece(Color.Red, PieceName.Rook),null, null, new Piece( Color.Red, PieceName.Pawn), null, null, new Piece( Color.Black, PieceName.Pawn), null, null, new Piece( Color.Black, PieceName.Rook) },
+			new Piece?[] { new (Color.Red, PieceName.Rook), null, null, new (Color.Red, PieceName.Pawn), null, null, new (Color.Black, PieceName.Pawn), null, null, new (Color.Black, PieceName.Rook) }
 		};
 		/// <summary>
 		/// if <see langword="true"/> : Chơi theo luật Cờ Úp
@@ -122,21 +119,26 @@ namespace BoardGames.ChineseChess
 
 		public Core(Piece?[][] mailBox = null)
 		{
+#if DEBUG
 			if (mailBox != null && (mailBox.Length != 9 || mailBox[0].Length != 10))
 				throw new ArgumentOutOfRangeException("mailBox phải là 9x10 !");
-
+#endif
 			mailBox ??= DEFAULT_MAILBOX;
-			for (int x = 0; x < 9; ++x)
+			bool hidden = false;
+			this.mailBox = Util.NewArray<Piece?>(9, 10, (x, y) =>
 			{
-				this.mailBox[x] = new Piece?[10];
-				for (int y = 0; y < 10; ++y)
-					if (mailBox[x][y] != null)
-					{
-						var piece = (this.mailBox[x][y] = mailBox[x][y]).Value;
-						hiddenChessRule |= piece.hidden;
-						if (piece.name == PieceName.General) generalIndexes[piece.color] = new Vector2Int(x, y);
-					}
-			}
+				if (mailBox[x][y] != null)
+				{
+					var piece = mailBox[x][y].Value;
+					hidden |= piece.hidden;
+					if (piece.name == PieceName.General) generalIndexes[piece.color] = new(x, y);
+					return piece;
+				}
+
+				return null;
+			});
+
+			hiddenChessRule = hidden;
 		}
 
 
@@ -169,25 +171,24 @@ namespace BoardGames.ChineseChess
 		{
 			Normal, Check, CheckMate
 		}
-
-		private readonly Dictionary<Color, State> states = new Dictionary<Color, State>
+		private readonly Dictionary<Color, State> states = new()
 		{
 			[Color.Red] = State.Normal,
 			[Color.Black] = State.Normal
 		};
 		public event Action<Color, State> onStateChanged;
-
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public State GetState(Color color) => states[color];
 
-		private readonly Dictionary<Color, Vector2Int> generalIndexes = new Dictionary<Color, Vector2Int>(2);
+
+		private readonly Dictionary<Color, Vector2Int> generalIndexes = new(2);
 		private bool GeneralIsChecked(Color color)
 		{
 			var G = generalIndexes[color];
-			var opponentColor = color.Opponent();
+			var enemyColor = 1 - color;
 
 			#region Kiểm tra lộ mặt Tướng
-			var OpponentG = generalIndexes[opponentColor];
+			var OpponentG = generalIndexes[enemyColor];
 			if (G.x == OpponentG.x)
 			{
 				var m = mailBox[G.x];
@@ -203,12 +204,13 @@ namespace BoardGames.ChineseChess
 			G = generalIndexes[color];
 			for (int x = 0; x < 9; ++x)
 				for (int y = 0; y < 10; ++y)
-					if (mailBox[x][y]?.color == opponentColor)
+					if (mailBox[x][y]?.color == enemyColor)
 					{
 						var piece = mailBox[x][y].Value;
 						if (piece.name == PieceName.General) continue;
-						if (FindPseudoLegalMoves(opponentColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new Vector2Int(x, y)).Contains(G)) return true;
+						if (FindPseudoLegalMoves(enemyColor, piece.hidden ? DEFAULT_MAILBOX[x][y].Value.name : piece.name, new(x, y)).Contains(G)) return true;
 					}
+
 			return false;
 		}
 		#endregion
@@ -314,8 +316,7 @@ namespace BoardGames.ChineseChess
 		};
 		private readonly List<Vector2Int> pseudoList = new(90);
 
-
-		private Vector2Int[] FindPseudoLegalMoves(in Color color, in PieceName name, in Vector2Int index)
+		private Vector2Int[] FindPseudoLegalMoves(Color color, PieceName name, in Vector2Int index)
 		{
 			var THIS_SIDE = SIDES[color];
 			var THIS_PALACE = PALACES[color];
@@ -329,7 +330,7 @@ namespace BoardGames.ChineseChess
 					for (int d = 0; d < 4; ++d)
 					{
 						x = index.x + DPAD_VECTORS[d].x; y = index.y + DPAD_VECTORS[d].y;
-						if (THIS_PALACE.Contains(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new Vector2Int(x, y));
+						if (THIS_PALACE.Contains(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
 					}
 					break;
 				#endregion
@@ -341,7 +342,7 @@ namespace BoardGames.ChineseChess
 						x = index.x + CROSS_VECTORS[d].x; y = index.y + CROSS_VECTORS[d].y;
 						if (((!hiddenChessRule && THIS_PALACE.Contains(x, y))
 							|| (hiddenChessRule && InsideBoard(x, y)))
-							&& mailBox[x][y]?.color != color) pseudoList.Add(new Vector2Int(x, y));
+							&& mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
 					}
 					break;
 				#endregion
@@ -359,7 +360,7 @@ namespace BoardGames.ChineseChess
 						x += dir.x; y += dir.y;
 						if (((!hiddenChessRule && THIS_SIDE.Contains(x, y))
 							|| (hiddenChessRule && InsideBoard(x, y)))
-							&& mailBox[x][y]?.color != color) pseudoList.Add(new Vector2Int(x, y));
+							&& mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
 					}
 					break;
 				#endregion
@@ -375,7 +376,7 @@ namespace BoardGames.ChineseChess
 						for (int c = 0; c < 2; ++c)
 						{
 							int cx = x + crosses[c].x, cy = y + crosses[c].y;
-							if (InsideBoard(cx, cy) && mailBox[cx][cy]?.color != color) pseudoList.Add(new Vector2Int(cx, cy));
+							if (InsideBoard(cx, cy) && mailBox[cx][cy]?.color != color) pseudoList.Add(new(cx, cy));
 						}
 					}
 					break;
@@ -390,7 +391,7 @@ namespace BoardGames.ChineseChess
 						while (InsideBoard(x += dir.x, y += dir.y))
 						{
 							var c = mailBox[x][y]?.color;
-							if (c != color) pseudoList.Add(new Vector2Int(x, y));
+							if (c != color) pseudoList.Add(new(x, y));
 							if (c != null) break;
 						}
 					}
@@ -408,7 +409,7 @@ namespace BoardGames.ChineseChess
 							var c = mailBox[x][y]?.color;
 							if (c == null)
 							{
-								pseudoList.Add(new Vector2Int(x, y)); continue;
+								pseudoList.Add(new(x, y)); continue;
 							}
 
 							while (InsideBoard(x += dir.x, y += dir.y))
@@ -416,7 +417,7 @@ namespace BoardGames.ChineseChess
 								var c2 = mailBox[x][y]?.color;
 								if (c2 == null) continue;
 
-								if (c2 != color) pseudoList.Add(new Vector2Int(x, y));
+								if (c2 != color) pseudoList.Add(new(x, y));
 								break;
 							}
 							break;
@@ -429,25 +430,27 @@ namespace BoardGames.ChineseChess
 					#region Pawn
 					var forward = COLOR_FORWARD_VECTORS[color];
 					x = index.x + forward.x; y = index.y + forward.y;
-					if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new Vector2Int(x, y));
+					if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
 					if (THIS_SIDE.Contains(index)) break;
+
 					for (int d = 0; d < 2; ++d)
 					{
 						x = index.x + DPAD_VECTORS[d].x; y = index.y + DPAD_VECTORS[d].y;
-						if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new Vector2Int(x, y));
+						if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
 					}
 					break;
 					#endregion
 			}
+
 			return pseudoList.ToArray();
 		}
 		#endregion
 
 
 		#region FindLegalMoves
-		private readonly List<Vector2Int> legalList = new List<Vector2Int>(90);
+		private readonly List<Vector2Int> legalList = new(90);
 
-		private Vector2Int[] FindLegalMoves(in Color color, in PieceName name, in Vector2Int index)
+		private Vector2Int[] FindLegalMoves(Color color, PieceName name, in Vector2Int index)
 		{
 			var moves = FindPseudoLegalMoves(color, name, index);
 			if (moves.Length == 0) return Array.Empty<Vector2Int>();
@@ -461,6 +464,7 @@ namespace BoardGames.ChineseChess
 				if (!GeneralIsChecked(color)) legalList.Add(to);
 				PseudoMove(data, undo: true);
 			}
+
 			return legalList.ToArray();
 		}
 
@@ -474,13 +478,13 @@ namespace BoardGames.ChineseChess
 
 
 		#region Move
-		public void Move(MoveData data, History.Mode mode)
+		public void Move(in MoveData data, MoveType mode)
 		{
-			bool undo = mode == History.Mode.Undo;
+			bool undo = mode == MoveType.Undo;
 			PseudoMove(data, undo);
 
 			#region Cập nhật State
-			var opponentColor = data.piece.color.Opponent();
+			var enemyColor = 1 - data.piece.color;
 			if (!undo)
 			{
 				#region DO
@@ -490,30 +494,31 @@ namespace BoardGames.ChineseChess
 
 				for (int x = 0; x < 9; ++x)
 					for (int y = 0; y < 10; ++y)
-						if (mailBox[x][y]?.color == opponentColor)
+						if (mailBox[x][y]?.color == enemyColor)
 						{
 							var piece = mailBox[x][y].Value;
-							if (FindLegalMoves(opponentColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new Vector2Int(x, y)).Length != 0)
+							if (FindLegalMoves(enemyColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new(x, y)).Length != 0)
 							{
-								if (GeneralIsChecked(opponentColor))
+								if (GeneralIsChecked(enemyColor))
 								{
-									states[opponentColor] = State.Check;
-									onStateChanged?.Invoke(opponentColor, State.Check);
+									states[enemyColor] = State.Check;
+									onStateChanged?.Invoke(enemyColor, State.Check);
 								}
+
 								goto FINISH_UPDATING_STATE;
 							}
 						}
 
-				states[opponentColor] = State.CheckMate;
-				onStateChanged?.Invoke(opponentColor, State.CheckMate);
+				states[enemyColor] = State.CheckMate;
+				onStateChanged?.Invoke(enemyColor, State.CheckMate);
 				#endregion
 			}
 			else
 			{
 				#region UNDO
-				var oldState = states[opponentColor];
-				states[opponentColor] = State.Normal;
-				if (oldState != State.Normal) onStateChanged?.Invoke(opponentColor, State.Normal);
+				var oldState = states[enemyColor];
+				states[enemyColor] = State.Normal;
+				if (oldState != State.Normal) onStateChanged?.Invoke(enemyColor, State.Normal);
 
 				if (GeneralIsChecked(data.piece.color))
 				{
@@ -528,13 +533,13 @@ namespace BoardGames.ChineseChess
 		}
 
 
-		private void PseudoMove(MoveData data, bool undo)
+		private void PseudoMove(in MoveData data, bool undo)
 		{
 			if (!undo)
 			{
 				#region DO
 				mailBox[data.from.x][data.from.y] = null;
-				mailBox[data.to.x][data.to.y] = new Piece(data.piece.color, data.piece.name);
+				mailBox[data.to.x][data.to.y] = new(data.piece.color, data.piece.name);
 				if (data.piece.name == PieceName.General) generalIndexes[data.piece.color] = data.to;
 				#endregion
 			}
@@ -551,20 +556,13 @@ namespace BoardGames.ChineseChess
 
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool InsideBoard(in int x, in int y) => -1 < x && x < 9 && -1 < y && y < 10;
+		public static bool InsideBoard(int x, int y) => -1 < x && x < 9 && -1 < y && y < 10;
 	}
 
 
 
 	public static class Extensions
 	{
-		/// <summary>
-		/// Lấy màu ngược với màu nhập vào.
-		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static Color Opponent(this Color color) => (Color)(1 - (int)color);
-
-
 		public static void PrintColorBits(this (int x, int y)[] array)
 		{
 			for (int y = 9; y >= 0; --y)

@@ -26,11 +26,14 @@ namespace BoardGames
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Vector3Int ToVector3Int(this in Vector2Int value) => new(value.x, value.y, 0);
 
+
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Vector2Int ToVector2Int(this in Vector3Int value) => new(value.x, value.y);
 
+
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Vector2 ToVector2(this in Vector3Int value) => new(value.x, value.y);
+
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Vector3 ToVector3(this in Vector2Int value) => new(value.x, value.y);
@@ -44,6 +47,7 @@ namespace BoardGames
 				value.x < 0 || value.y < 0 ? throw new IndexOutOfRangeException($"value= {value} phải là tọa độ không âm !") :
 #endif
 			new((int)value.x, (int)value.y);
+
 
 		/// <summary>
 		/// z = 0
@@ -61,6 +65,7 @@ namespace BoardGames
 				transform.position = Vector3.MoveTowards(transform.position, dest, speed);
 				await UniTask.Yield();
 			}
+
 			if (!token.IsCancellationRequested && transform) transform.position = dest;
 		}
 
@@ -74,11 +79,11 @@ namespace BoardGames
 			var baking = new ReadOnlyArray<T>[sizeX];
 			for (int x = 0; x < sizeX; ++x)
 			{
-				array[x] = new T[sizeY];
-				baking[x] = new(array[x]);
+				baking[x] = new(array[x] = new T[sizeY]);
 				if (initialize != null)
 					for (int y = 0; y < sizeY; ++y) array[x][y] = initialize(x, y);
 			}
+
 			return new(baking);
 		}
 
@@ -92,11 +97,12 @@ namespace BoardGames
 				if (initialize != null)
 					for (int y = 0; y < sizeY; ++y) array[x][y] = initialize(x, y);
 			}
+
 			return array;
 		}
 
 
-		public static bool isRunning(this ref UniTask task)
+		public static bool IsRunning(this ref UniTask task)
 		{
 			try { return task.Status == UniTaskStatus.Pending; }
 			catch (InvalidOperationException)
@@ -107,7 +113,7 @@ namespace BoardGames
 		}
 
 
-		public static bool isRunning<T>(this ref UniTask<T> task)
+		public static bool IsRunning<T>(this ref UniTask<T> task)
 		{
 			try { return task.Status == UniTaskStatus.Pending; }
 			catch (InvalidOperationException)
@@ -115,14 +121,6 @@ namespace BoardGames
 				task = default;
 				return false;
 			}
-		}
-
-
-		public static void CheckValidDpad(this in Vector3 direction)
-		{
-			if (direction != default && direction != Vector3.up
-				&& direction != Vector3.right && direction != Vector3.down
-				&& direction != Vector3.left) throw new Exception($"{direction} is not valid !");
 		}
 
 
@@ -150,28 +148,29 @@ namespace BoardGames
 	public struct ReadOnlyArray<T> : IEnumerable<T>
 	{
 		[SerializeField] private T[] array;
-
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public ReadOnlyArray(T[] array) => this.array = array;
 
+
 		public ReadOnlyArray(in ReadOnlyArray<T> wrapper) => array = wrapper.array.Clone() as T[];
+
 
 		public T this[int index] => array[index];
 
+
 		public int Length => array.Length;
+
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public IEnumerator<T> GetEnumerator() => (array as IEnumerable<T>).GetEnumerator();
+
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		IEnumerator IEnumerable.GetEnumerator() => array.GetEnumerator();
 
 
-		public bool Contains(in T item)
-		{
-			for (int i = 0; i < array.Length; ++i) if (array[i].Equals(item)) return true;
-			return false;
-		}
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public bool Contains(in T item) => array.Contains(item);
 	}
 
 
@@ -212,7 +211,6 @@ namespace BoardGames
 				hiddenObj.RemoveAt(0);
 			}
 			else obj = UnityEngine.Object.Instantiate(prefab);
-
 			obj.transform.parent = visibleAnchor;
 			visibleObj.Add(obj);
 			obj.transform.position = position;
@@ -559,72 +557,70 @@ namespace BoardGames
 
 
 
+	public enum MoveType
+	{
+		Play, Undo, Redo
+	}
+
+
+
 	/// <summary>
 	/// Lưu lại lịch sử các nước đi và cho phép Undo/ Redo.<br/>
 	/// Trạng thái bàn chơi chỉ được thay đổi thông qua Play, Undo và Redo
 	/// </summary>
 	public sealed class History<I, D> where I : struct, Enum where D : struct, IMoveData<I>
 	{
-		private readonly List<D> recentMoves;
-		private readonly List<D[]> undoneMoves;
+		private readonly List<D> recentMoves = new();
+		private readonly List<D[]> undoneMoves = new();
 		/// <summary>
 		/// Số lượng nước đã đi (Play/Redo).
 		/// </summary>
 		public int moveCount => recentMoves.Count;
 		public D this[int index] => recentMoves[index];
-		public enum Mode
-		{
-			Play, Undo, Redo
-		}
+
 		/// <summary>
 		/// Thực thi 1 nước đi (Play/Undo/Redo)<para/>
 		/// Chú ý: không nên sử dụng <see cref="History"/> trong event vì trạng thái <see cref="History"/> đang không hợp lệ !
 		/// </summary>
-		public event Action<Mode, D> execute;
+		public event Action<MoveType, D> execute;
 
 		/// <summary>
 		/// Flags tối ưu cho CanUndo và CanRedo
 		/// </summary>
-		private readonly IReadOnlyDictionary<Mode, Dictionary<I, bool>> flags = new Dictionary<Mode, Dictionary<I, bool>>
+		private readonly IReadOnlyDictionary<MoveType, Dictionary<I, bool>> flags = new Dictionary<MoveType, Dictionary<I, bool>>
 		{
-			[Mode.Undo] = new(),
-			[Mode.Redo] = new()
+			[MoveType.Undo] = new(),
+			[MoveType.Redo] = new()
 		};
 
 
-		public History()
-		{
-			recentMoves = new List<D>();
-			undoneMoves = new List<D[]>();
-		}
+		public History() { }
 
 
-		public History(History<I, D> history) : this()
+		public History(History<I, D> history)
 		{
 			recentMoves.AddRange(history.recentMoves);
 			undoneMoves.AddRange(history.undoneMoves);
-			for (int i = 0; i < undoneMoves.Count; ++i)
-			{
-				var moves = undoneMoves[i];
-				Array.Copy(moves, undoneMoves[i] = new D[moves.Length], moves.Length);
-			}
+			int i = 0;
+			foreach (var moves in history.undoneMoves)
+				Array.Copy(moves, undoneMoves[i++] = new D[moves.Length], moves.Length);
 		}
 
 
 		public void Play(in D data)
 		{
-			flags[Mode.Undo].Clear();
-			flags[Mode.Redo].Clear();
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
 			undoneMoves.Clear();
 			if (recentMoves.Count == ushort.MaxValue) recentMoves.RemoveAt(0);
 			recentMoves.Add(data);
-			execute(Mode.Play, data);
+			execute(MoveType.Play, data);
 		}
 
 
 		public bool CanUndo(I playerID)
 		{
-			var f = flags[Mode.Undo];
+			var f = flags[MoveType.Undo];
 			if (f.TryGetValue(playerID, out bool value)) return value;
 
 			for (int i = recentMoves.Count - 1; i >= 0; --i)
@@ -639,8 +635,8 @@ namespace BoardGames
 		{
 			if (!CanUndo(playerID)) return false;
 
-			flags[Mode.Undo].Clear();
-			flags[Mode.Redo].Clear();
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
 			tmpMoves.Clear();
 			I tmpID;
 
@@ -649,7 +645,7 @@ namespace BoardGames
 				var move = recentMoves[^1];
 				recentMoves.RemoveAt(recentMoves.Count - 1);
 				tmpMoves.Add(move);
-				execute(Mode.Undo, move);
+				execute(MoveType.Undo, move);
 				tmpID = move.playerID;
 			} while (!tmpID.Equals(playerID));
 			undoneMoves.Add(tmpMoves.ToArray());
@@ -659,7 +655,7 @@ namespace BoardGames
 
 		public bool CanRedo(I playerID)
 		{
-			var f = flags[Mode.Redo];
+			var f = flags[MoveType.Redo];
 			if (f.TryGetValue(playerID, out bool value)) return value;
 
 			for (int i = undoneMoves.Count - 1; i >= 0; --i)
@@ -676,8 +672,8 @@ namespace BoardGames
 		{
 			if (!CanRedo(playerID)) return false;
 
-			flags[Mode.Undo].Clear();
-			flags[Mode.Redo].Clear();
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
 			I tmpID;
 
 			do
@@ -687,7 +683,7 @@ namespace BoardGames
 				for (int i = moves.Length - 1; i >= 0; --i)
 				{
 					var move = moves[i];
-					execute(Mode.Redo, move);
+					execute(MoveType.Redo, move);
 					recentMoves.Add(move);
 				}
 

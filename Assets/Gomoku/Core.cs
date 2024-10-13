@@ -1,9 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.CompilerServices;
 using UnityEngine;
-using History = BoardGames.History<BoardGames.Gomoku.Symbol, BoardGames.Gomoku.MoveData>;
 
 
 namespace BoardGames.Gomoku
@@ -45,13 +42,12 @@ namespace BoardGames.Gomoku
 		private int emptyCells;
 
 
-		public Core(Vector2Int size)
+		public Core(in Vector2Int size)
 		{
 			if (size.x < 5 || size.y < 5) throw new ArgumentOutOfRangeException($"Size phải >= (5, 5). size= {size}");
 			if (size.x > 100 || size.y > 100) throw new OutOfMemoryException($"Size quá lớn. size= {size}");
-			mailBox = new Symbol?[size.x][];
-			for (int x = 0; x < size.x; ++x) mailBox[x] = new Symbol?[size.y];
-			rect = new Rect(0, 0, size.x - 1, size.y - 1);
+			mailBox = Util.NewArray<Symbol?>(size.x, size.y);
+			rect = new Rect(0, 0, size.x, size.y);
 			emptyCells = size.x * size.y;
 		}
 
@@ -59,8 +55,8 @@ namespace BoardGames.Gomoku
 		public Core(Symbol?[][] mailBox) : this(new Vector2Int(mailBox.Length, mailBox[0].Length))
 		{
 			// Không kiểm tra {state}, nếu {mailBox} đã kết thúc sẽ gây lỗi tiềm tàng
-			for (int x = 0; x <= rect.xMax; ++x)
-				for (int y = 0; y <= rect.yMax; ++y)
+			for (int x = 0; x < rect.xMax; ++x)
+				for (int y = 0; y < rect.yMax; ++y)
 					if (mailBox[x][y] != null)
 					{
 						this.mailBox[x][y] = mailBox[x][y];
@@ -71,7 +67,7 @@ namespace BoardGames.Gomoku
 
 		public Core(Core core) : this(core.mailBox)
 		{
-			if (core.state != State.Normal) throw new InvalidOperationException("Không thể copy Board đã kết thúc !");
+			if (core.state != null) throw new InvalidOperationException("Không thể copy Board đã kết thúc !");
 		}
 
 
@@ -82,12 +78,12 @@ namespace BoardGames.Gomoku
 		#region State
 		public enum State
 		{
-			Normal, O_Win, X_Win, Draw
+			O_Win = 0, X_Win = 1, Draw = 2
 		}
-		public State state { get; private set; }
-		public readonly IReadOnlyList<Vector3[]> winLines = new List<Vector3[]>();
-		private static readonly Vector3 WINLINE_DELTA = new Vector3(0.5f, 0.5f);
-		public event Action<State> onStateChanged;
+		public State? state { get; private set; }
+		public readonly IReadOnlyList<ReadOnlyArray<Vector3>> winLines = new List<ReadOnlyArray<Vector3>>();
+		private static readonly Vector3 WINLINE_DELTA = new(0.5f, 0.5f);
+		public event Action<State?> onStateChanged;
 		#endregion
 
 
@@ -149,17 +145,17 @@ namespace BoardGames.Gomoku
 		};
 
 
-		public void Move(MoveData data, History.Mode mode)
+		public void Move(MoveData data, MoveType mode)
 		{
-			if (mode != History.Mode.Undo)
+			if (mode != MoveType.Undo)
 			{
 				#region DO
-				mailBox[data.index.x][data.index.y] = (Symbol)data.playerID;
+				mailBox[data.index.x][data.index.y] = data.playerID;
 				--emptyCells;
 
 				#region Kiểm tra {data.playerID} có chiến thắng hay bàn cờ hòa ?
-				var enemySymbol = data.playerID == (int)Symbol.O ? Symbol.X : Symbol.O;
-				var winLines = this.winLines as List<Vector3[]>;
+				var enemySymbol = 1 - data.playerID;
+				var winLines = this.winLines as List<ReadOnlyArray<Vector3>>;
 				winLines.Clear();
 
 				for (int a = 0; a < 4; ++a)
@@ -178,17 +174,18 @@ namespace BoardGames.Gomoku
 							if (symbol == enemySymbol) ++enemy;
 							break;
 						}
+
 						if (count > 5) goto CONTINUE_LOOP_AXE;
 						++lineIndex;
 					}
 
-					if (count == 5 && enemy < 2) winLines.Add(line);
+					if (count == 5 && enemy < 2) winLines.Add(new(line));
 					CONTINUE_LOOP_AXE:;
 				}
 
 				if (winLines.Count != 0)
 				{
-					state = data.playerID == (int)Symbol.O ? State.O_Win : State.X_Win;
+					state = (State)data.playerID;
 					onStateChanged?.Invoke(state);
 				}
 				else if (emptyCells == 0)
@@ -207,23 +204,12 @@ namespace BoardGames.Gomoku
 
 				#region Cập nhật state
 				var oldState = state;
-				state = State.Normal;
-				if (oldState != State.Normal) onStateChanged?.Invoke(state);
+				state = null;
+				if (oldState != null) onStateChanged?.Invoke(state);
 				#endregion
 				#endregion
 			}
 		}
 		#endregion
-	}
-
-
-
-	public static class Extensions
-	{
-		/// <summary>
-		/// Lấy biểu tượng ngược với biểu tượng nhập vào.
-		/// </summary>
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static Symbol Opponent(this Symbol symbol) => (Symbol)(1 - (int)symbol);
 	}
 }
