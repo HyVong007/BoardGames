@@ -1,6 +1,7 @@
 ﻿using Cysharp.Threading.Tasks;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using UnityEngine;
@@ -165,8 +166,7 @@ namespace BoardGames.KingChess
 				[PieceName.Rook] = 0UL
 			}
 		};
-		private readonly (Color playerID, PieceName name)?[][] mailBox = new (Color playerID, PieceName name)?[8][];
-
+		private readonly (Color playerID, PieceName name)?[][] mailBox;
 
 		private static readonly (Color playerID, PieceName name)?[][] DEFAULT_MAILBOX = new (Color playerID, PieceName name)?[][]
 		{
@@ -194,6 +194,7 @@ namespace BoardGames.KingChess
 			// H
 			new (Color playerID, PieceName name)?[]{(Color.White, PieceName.Rook), (Color.White, PieceName.Pawn), null, null, null, null, (Color.Black, PieceName.Pawn), (Color.Black, PieceName.Rook)},
 		};
+
 		public Core(History history = null, (Color playerID, PieceName name)?[][] mailBox = null)
 		{
 			this.history = history ?? new History();
@@ -208,20 +209,27 @@ namespace BoardGames.KingChess
 				[Color.Black] = new Dictionary<int, (bool moved, int count)>()
 			};
 
-			for (int x = 0; x < 8; ++x) this.mailBox[x] = new (Color playerID, PieceName name)?[8];
-			for (int index = 0, y = 0; y < 8; ++y)
-				for (int x = 0; x < 8; ++x, ++index)
-					if (mailBox[x][y] != null)
-					{
-						var (playerID, name) = (this.mailBox[x][y] = mailBox[x][y]).Value;
-						bitboards[playerID][name] = bitboards[playerID][name].SetBit(index);
+			int index = 0;
+			this.mailBox = Util.NewArray(8, 8, (x, y) =>
+			{
+				if (mailBox[x][y] != null)
+				{
+					var (playerID, name) = mailBox[x][y].Value;
+					bitboards[playerID][name] = bitboards[playerID][name].SetBit(index);
 
-						if (name == PieceName.Rook)
-							rookHistory[playerID][index] =
-							(playerID == Color.White && (index == 0 || index == 7)) ? (false, 0)
-							: (playerID == Color.Black && (index == 56 || index == 63)) ? (false, 0)
-							: (true, 0);
-					}
+					if (name == PieceName.Rook)
+						rookHistory[playerID][index] =
+						(playerID == Color.White && (index == 0 || index == 7)) ? (false, 0)
+						: (playerID == Color.Black && (index == 56 || index == 63)) ? (false, 0)
+						: (true, 0);
+
+					++index;
+					return mailBox[x][y];
+				}
+
+				++index;
+				return null;
+			});
 			#endregion
 
 			kingHistory = new Dictionary<Color, (bool moved, int count)>
@@ -238,17 +246,9 @@ namespace BoardGames.KingChess
 		}
 
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static (Color playerID, PieceName name)?[][] CloneDefaultMailBox()
-		{
-			var result = new (Color playerID, PieceName name)?[8][];
-			for (int x = 0; x < 8; ++x)
-			{
-				result[x] = new (Color playerID, PieceName name)?[8];
-				for (int y = 0; y < 8; ++y) result[x][y] = DEFAULT_MAILBOX[x][y];
-			}
-
-			return result;
-		}
+		=> Util.NewArray(8, 8, (x, y) => DEFAULT_MAILBOX[x][y]);
 		#endregion
 
 
@@ -283,14 +283,13 @@ namespace BoardGames.KingChess
 		/// Vua <paramref name="playerID"/> có bị chiếu ?
 		///</summary>
 		/// <param name="playerID">Màu của quân Vua đang kiểm tra.</param>
-		/// <param name="opponentKH">Lịch sử quân Vua của địch</param>
-		/// <param name="opponentRH">Lịch sử quân Xe của địch</param>
-		private bool KingIsChecked(Color playerID, MoveData latestMoveData)
+		private bool KingIsChecked(Color playerID, in MoveData lastMoveData)
 		{
 			ulong king = bitboards[playerID][PieceName.King];
-			var opponentColor = 1 - playerID;
-			for (int pn = 0; pn < 6; ++pn)
-				if ((king & FindPseudoLegalMoves(opponentColor, (PieceName)pn, latestMoveData)) != 0) return true;
+			var enemyColor = 1 - playerID;
+			foreach (var name in ALL_PIECE_NAMES.Random())
+				if ((king & FindPseudoLegalMoves(enemyColor, name, lastMoveData)) != 0) return true;
+
 			return false;
 		}
 		#endregion
@@ -306,7 +305,7 @@ namespace BoardGames.KingChess
 				for (int x = 0; x < mailBox.Length; ++x)
 				{
 					var d = mailBox[x][y];
-					s += d != null ? $"  {(d.Value.playerID == Color.White ? PIECENAME_STRING_DICT[d.Value.name] : PIECENAME_STRING_DICT[d.Value.name].ToLower())}  " : "  *  ";
+					s += d != null ? $"  {(d.Value.playerID == Color.White ? PIECENAME_STRING[d.Value.name] : PIECENAME_STRING[d.Value.name].ToLower())}  " : "  *  ";
 				}
 				s += "\n";
 			}
@@ -327,7 +326,7 @@ namespace BoardGames.KingChess
 					if (d != null)
 					{
 						Console.ForegroundColor = d.Value.playerID == Color.White ? ConsoleColor.White : ConsoleColor.DarkCyan;
-						Console.Write($"  {PIECENAME_STRING_DICT[d.Value.name]}  ");
+						Console.Write($"  {PIECENAME_STRING[d.Value.name]}  ");
 					}
 					else
 					{
@@ -344,7 +343,7 @@ namespace BoardGames.KingChess
 		}
 
 
-		private static readonly IReadOnlyDictionary<PieceName, string> PIECENAME_STRING_DICT = new Dictionary<PieceName, string>
+		private static readonly IReadOnlyDictionary<PieceName, string> PIECENAME_STRING = new Dictionary<PieceName, string>
 		{
 			[PieceName.Pawn] = "P",
 			[PieceName.Rook] = "R",
@@ -448,11 +447,14 @@ namespace BoardGames.KingChess
 			{
 				source &= NOT_BORDER;
 				if (source == 0) break;
+
 				source = SHIFT == LEFT_SHIFT ? source << STEP : source >> STEP;
 				result |= source & EMPTY_OR_OPPONENT;
 				if (++step == MAX_STEP) break;
+
 				source &= EMPTY;
 			}
+
 			return result;
 		}
 		#endregion
@@ -463,14 +465,15 @@ namespace BoardGames.KingChess
 		/// <para>(bit 1 = move-square)</para>
 		/// </summary>
 		/// <param name="index"><c>if index != <see langword="null"/>:</c> Chỉ trả về tập hợp moves của quân cờ tại index.</param>
-		private ulong FindPseudoLegalMoves(in Color playerID, in PieceName name, in MoveData? latestMoveData, in int? index = null)
+		private ulong FindPseudoLegalMoves(Color playerID, PieceName name, in MoveData? lastMoveData, int? index = null)
 		{
 			ulong SOURCE = index != null ? bitboards[playerID][name].GetBit(index.Value) : bitboards[playerID][name];
 			if (SOURCE == 0) return 0UL;
+
 			ulong result = 0UL;
 			ulong EMPTY = empty;
-			ulong OPPONENT = this[1 - playerID];
-			ulong EMPTY_OR_OPPONENT = EMPTY | OPPONENT;
+			ulong ENEMY = this[1 - playerID];
+			ulong EMPTY_OR_ENEMY = EMPTY | ENEMY;
 
 			switch (name)
 			{
@@ -480,26 +483,26 @@ namespace BoardGames.KingChess
 					{
 						#region White Pawn Moves: dịch chuyển bằng Left Shift <<
 						ulong P_ls = SOURCE << 7;
-						result |= P_ls & OPPONENT & ~FILE_H;     // ăn chéo trái
+						result |= P_ls & ENEMY & ~FILE_H;     // ăn chéo trái
 						P_ls <<= 1;
 						ulong forward1 = P_ls & EMPTY;              // đi về trước 1 bước
 						result |= forward1;
 						result |= forward1 << 8 & EMPTY & RANK_4;   // đi về trước 2 bước
 						P_ls <<= 1;
-						result |= P_ls & OPPONENT & ~FILE_A;     // ăn chéo phải		
+						result |= P_ls & ENEMY & ~FILE_A;     // ăn chéo phải		
 						#endregion
 					}
 					else
 					{
 						#region Black Pawn Moves: dịch chuyển bằng Right Shift >>
 						ulong P_rs = SOURCE >> 7;
-						result |= P_rs & OPPONENT & ~FILE_A;     // ăn chéo trái
+						result |= P_rs & ENEMY & ~FILE_A;     // ăn chéo trái
 						P_rs >>= 1;
 						ulong forward1 = P_rs & EMPTY;              // đi về trước 1 bước
 						result |= forward1;
 						result |= forward1 >> 8 & EMPTY & RANK_5;   // đi về trước 2 bước
 						P_rs >>= 1;
-						result |= P_rs & OPPONENT & ~FILE_H;     // ăn chéo phải
+						result |= P_rs & ENEMY & ~FILE_H;     // ăn chéo phải
 						#endregion
 					}
 
@@ -508,14 +511,16 @@ namespace BoardGames.KingChess
 					ulong P = SOURCE & (playerID == Color.White ? RANK_5 : RANK_4);
 					if (P == 0) return result;
 
-					// Kiểm tra xem có tốt địch nào của lượt mới nhất, nằm bên trai hoặc phải của Tốt mình
-					if (latestMoveData == null) return result;
-					if (latestMoveData.Value.playerID != playerID && latestMoveData.Value.name == PieceName.Pawn
-						&& UnityEngine.Mathf.Abs(latestMoveData.Value.from - latestMoveData.Value.to) == 16)
+					// Kiểm tra xem có tốt địch nào của lượt mới nhất, nằm bên trái hoặc phải của tốt mình
+					if (lastMoveData == null) return result;
+
+					var data = lastMoveData.Value;
+					if (data.playerID != playerID && data.name == PieceName.Pawn
+						&& Mathf.Abs(data.from - data.to) == 16)
 					{
-						ulong opponentP = bitboards[(Color)latestMoveData.Value.playerID][PieceName.Pawn].GetBit(latestMoveData.Value.to);
+						ulong opponentP = bitboards[data.playerID][PieceName.Pawn].GetBit(data.to);
 						if (((P << 1) & opponentP) != 0 || ((P >> 1) & opponentP) != 0)
-							result = result.SetBit(latestMoveData.Value.playerID == (int)Color.White ? latestMoveData.Value.from + 8 : latestMoveData.Value.to + 8);
+							result = result.SetBit(data.playerID == (int)Color.White ? data.from + 8 : data.to + 8);
 					}
 					#endregion
 
@@ -524,19 +529,19 @@ namespace BoardGames.KingChess
 
 				case PieceName.Rook:
 					#region Rook moves
-					for (int i = 0; i < 4; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_OPPONENT);
+					for (int i = 0; i < 4; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_ENEMY);
 					return result;
 				#endregion
 
 				case PieceName.Bishop:
 					#region Bishop moves
-					for (int i = 4; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_OPPONENT);
+					for (int i = 4; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_ENEMY);
 					return result;
 				#endregion
 
 				case PieceName.Queen:
 					#region Queen moves
-					for (int i = 0; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_OPPONENT);
+					for (int i = 0; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_ENEMY);
 					return result;
 				#endregion
 
@@ -556,15 +561,16 @@ namespace BoardGames.KingChess
 					result |= (K >>= 5) & ~FILE_A;  // D-D-R
 					result |= (K >>= 2) & ~FILE_H;  // D-D-L
 
-					return result & EMPTY_OR_OPPONENT;
+					return result & EMPTY_OR_ENEMY;
 				#endregion
 
 				case PieceName.King:
 					#region King moves
-					for (int i = 0; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_OPPONENT, 1);
+					for (int i = 0; i < 8; ++i) result |= FindSlicingMoves(SOURCE, (Direction)i, EMPTY, EMPTY_OR_ENEMY, 1);
 
 					// Castling
 					if (kingHistory[playerID] != (false, 0)) return result;
+
 					ulong R = bitboards[playerID][PieceName.Rook];
 					var RH = rookHistory[playerID];
 					if (playerID == Color.White)
@@ -585,6 +591,7 @@ namespace BoardGames.KingChess
 						if (EMPTY.IsBit1(59) && EMPTY.IsBit1(58) && EMPTY.IsBit1(57) && R.IsBit1(56) && RH[56] == (false, 0)) result = result.SetBit(58);
 						#endregion
 					}
+
 					return result;
 				#endregion
 
@@ -594,9 +601,8 @@ namespace BoardGames.KingChess
 
 
 		#region FindLegalMoves: Tìm các nước đi hợp lệ sau khi đã kiểm tra King xem có bị chiếu.
-		private readonly List<int> list = new(64);
+		//private readonly List<int> list = new(64);
 		public readonly History history;
-
 
 		/// <summary>
 		/// Tìm các ô có thể move tới của các quân cờ (playerID, piece).
@@ -605,39 +611,40 @@ namespace BoardGames.KingChess
 		/// </summary>
 		/// <param name="index"><c>if index != null:</c> Chỉ tìm các moves của quân cờ tại index.</param>
 		/// <returns></returns>
-		private int[] FindLegalMoves(Color color, PieceName name, int? index)
+		private IEnumerable<int> FindLegalMoves(Color color, PieceName name, int? index)
 		{
-			list.Clear();
-			var latestMoveData = history.moveCount != 0 ? history[history.moveCount - 1] : (MoveData?)null;
+			//list.Clear();
+			var lastMoveData = history.moveCount != 0 ? history[history.moveCount - 1] : (MoveData?)null;
 
 			#region {index} != null : Chỉ tìm move của 1 quân cờ tại index
 			if (index != null)
 			{
-				ulong moves = FindPseudoLegalMoves(color, name, latestMoveData, index);
-				if (moves == 0) return Array.Empty<int>();
+				ulong moves = FindPseudoLegalMoves(color, name, lastMoveData, index);
+				if (moves == 0) yield break;
 
 				int[] to = moves.Bit1_To_Index();
-				for (int i = 0, from = index.Value; i < to.Length; ++i) if (LegalMove(from, to[i])) list.Add(to[i]);
-				return list.ToArray();
+				for (int i = 0, from = index.Value; i < to.Length; ++i)
+					if (LegalMove(from, to[i])) yield return to[i];
+
+				yield break;
 			}
 			#endregion
 
 			#region {index} == null: Tìm move của tất cả quân cờ ({playerID}, {name}) 
 			ulong SOURCE = bitboards[color][name];
-			if (SOURCE == 0) return Array.Empty<int>();
+			if (SOURCE == 0) yield break;
 
 			int[] froms = SOURCE.Bit1_To_Index();
 			for (int f = 0; f < froms.Length; ++f)
 			{
-				ulong moves = FindPseudoLegalMoves(color, name, latestMoveData, froms[f]);
+				ulong moves = FindPseudoLegalMoves(color, name, lastMoveData, froms[f]);
 				if (moves == 0) continue;
 
 				int[] to = moves.Bit1_To_Index();
-				for (int t = 0, from = froms[f]; t < to.Length; ++t) if (LegalMove(from, to[t])) list.Add(to[t]);
+				for (int t = 0, from = froms[f]; t < to.Length; ++t)
+					if (LegalMove(from, to[t])) yield return to[t];
 			}
-			return list.ToArray();
 			#endregion
-
 
 			bool LegalMove(int from, int to)
 			{
@@ -661,7 +668,7 @@ namespace BoardGames.KingChess
 		/// Tìm các ô có thể move tới của quân cờ tại index.
 		/// <para>Đã kiểm tra an toàn: Vua vẫn an toàn ngay sau khi move.</para>
 		/// </summary>
-		public int[] FindLegalMoves(int index)
+		public IEnumerable<int> FindLegalMoves(int index)
 		{
 			var move = index.ToMailBoxIndex();
 			var (color, name) = mailBox[move.x][move.y].Value;
@@ -673,15 +680,11 @@ namespace BoardGames.KingChess
 		/// Tìm các ô có thể move tới của quân cờ tại (x, y).
 		/// <para>Đã kiểm tra an toàn: Vua vẫn an toàn ngay sau khi move.</para>
 		/// </summary>
-		public Vector2Int[] FindLegalMoves(in Vector2Int index)
+		public IEnumerable<Vector2Int> FindLegalMoves(Vector2Int index)
 		{
 			var (color, name) = mailBox[index.x][index.y].Value;
-			int[] moves = FindLegalMoves(color, name, index.ToBitIndex());
-			if (moves.Length == 0) return Array.Empty<Vector2Int>();
-
-			var result = new Vector2Int[moves.Length];
-			for (int i = 0; i < moves.Length; ++i) result[i] = moves[i].ToMailBoxIndex();
-			return result;
+			foreach (var move in FindLegalMoves(color, name, index.ToBitIndex()))
+				yield return move.ToMailBoxIndex();
 		}
 		#endregion
 
@@ -705,6 +708,7 @@ namespace BoardGames.KingChess
 				},
 			};
 
+		private static readonly PieceName[] ALL_PIECE_NAMES = Enum.GetValues(typeof(PieceName)) as PieceName[];
 
 		public void Move(in MoveData data, MoveType mode)
 		{
@@ -724,16 +728,16 @@ namespace BoardGames.KingChess
 			}
 			#endregion
 
-			var opponentColor = 1 - data.playerID;
+			var enemyColor = 1 - data.playerID;
 
 			#region Cập nhật {rookHistory}
-			var myRH = rookHistory[(Color)data.playerID];
-			var opponentRH = rookHistory[opponentColor];
+			var myRH = rookHistory[data.playerID];
+			var enemyRH = rookHistory[enemyColor];
 
 			if (!undo)
 			{
 				#region DO
-				//if (data.capturedName == PieceName.Rook) opponentRH.Remove(data.to);
+				//if (data.capturedName == PieceName.Rook) enemyRH.Remove(data.to);
 
 				if (data.name == PieceName.Rook)
 				{
@@ -745,7 +749,7 @@ namespace BoardGames.KingChess
 				else if (data.promotedName == PieceName.Rook) myRH[data.to] = (true, 0);
 				else if (data.castling != MoveData.Castling.None)
 				{
-					var (from, to, _, _) = CASTLING_ROOK_MOVEMENTS[(Color)data.playerID][data.castling];
+					var (from, to, _, _) = CASTLING_ROOK_MOVEMENTS[data.playerID][data.castling];
 					//myRH.Remove(from);
 					myRH[to] = (false, 1);
 				}
@@ -764,53 +768,53 @@ namespace BoardGames.KingChess
 				//else if (data.promotedName == PieceName.Rook) myRH.Remove(data.to);
 				else if (data.castling != MoveData.Castling.None)
 				{
-					var (from, to, _, _) = CASTLING_ROOK_MOVEMENTS[(Color)data.playerID][data.castling];
+					var (from, to, _, _) = CASTLING_ROOK_MOVEMENTS[data.playerID][data.castling];
 					//myRH.Remove(to);
 					myRH[from] = (false, 0);
 				}
 
-				if (data.capturedName == PieceName.Rook) opponentRH[data.to] = data.capturedRookHistory;
+				if (data.capturedName == PieceName.Rook) enemyRH[data.to] = data.capturedRookHistory;
 				#endregion
 			}
 			#endregion
 
 			#region Cập nhật State
-			var latestMoveData = history.moveCount != 0 ? history[history.moveCount - 1] as MoveData? : null;
-
+			var lastMoveData = history.moveCount != 0 ? history[history.moveCount - 1] as MoveData? : null;
 
 			if (!undo)
 			{
 				#region DO
-				var oldState = states[(Color)data.playerID];
-				states[(Color)data.playerID] = State.Normal;
-				if (oldState == State.Check) onStateChanged?.Invoke((Color)data.playerID, State.Normal);
+				var oldState = states[data.playerID];
+				states[data.playerID] = State.Normal;
+				if (oldState == State.Check) onStateChanged?.Invoke(data.playerID, State.Normal);
 
-				for (int p = 0; p < 6; ++p)
-					if (FindLegalMoves(opponentColor, (PieceName)p, null).Length != 0)
+				foreach (var name in ALL_PIECE_NAMES.Random())
+					if (FindLegalMoves(enemyColor, name, null).Any())
 					{
-						if (KingIsChecked(opponentColor, latestMoveData.Value))
+						if (KingIsChecked(enemyColor, lastMoveData.Value))
 						{
-							states[opponentColor] = State.Check;
-							onStateChanged?.Invoke(opponentColor, State.Check);
+							states[enemyColor] = State.Check;
+							onStateChanged?.Invoke(enemyColor, State.Check);
 						}
+
 						goto FINISH_UPDATING_STATE;
 					}
 
-				states[opponentColor] = State.CheckMate;
-				onStateChanged?.Invoke(opponentColor, State.CheckMate);
+				states[enemyColor] = State.CheckMate;
+				onStateChanged?.Invoke(enemyColor, State.CheckMate);
 				#endregion
 			}
 			else
 			{
 				#region UNDO
-				var oldState = states[opponentColor];
-				states[opponentColor] = State.Normal;
-				if (oldState != State.Normal) onStateChanged?.Invoke(opponentColor, State.Normal);
+				var oldState = states[enemyColor];
+				states[enemyColor] = State.Normal;
+				if (oldState != State.Normal) onStateChanged?.Invoke(enemyColor, State.Normal);
 
-				if (KingIsChecked((Color)data.playerID, latestMoveData.Value))
+				if (KingIsChecked(data.playerID, lastMoveData.Value))
 				{
-					states[(Color)data.playerID] = State.Check;
-					onStateChanged?.Invoke((Color)data.playerID, State.Check);
+					states[data.playerID] = State.Check;
+					onStateChanged?.Invoke(data.playerID, State.Check);
 				}
 				#endregion
 			}
@@ -827,7 +831,7 @@ namespace BoardGames.KingChess
 		private void PseudoMove(in MoveData data, bool undo)
 		{
 			ulong PIECE = bitboards[data.playerID][data.name];
-			ulong OPPONENT_PIECE = data.capturedName != null ? bitboards[1 - data.playerID][data.capturedName.Value] : 0UL;
+			ulong ENEMY_PIECE = data.capturedName != null ? bitboards[1 - data.playerID][data.capturedName.Value] : 0UL;
 			var from = data.from.ToMailBoxIndex();
 			var to = data.to.ToMailBoxIndex();
 
@@ -838,9 +842,9 @@ namespace BoardGames.KingChess
 				mailBox[from.x][from.y] = null;
 
 				#region Đặt quân vào ô vị trí {to}
-				mailBox[to.x][to.y] = ((Color)data.playerID, data.promotedName != null ? data.promotedName.Value : data.name);
+				mailBox[to.x][to.y] = (data.playerID, data.promotedName != null ? data.promotedName.Value : data.name);
 				if (data.promotedName != null)
-					bitboards[(Color)data.playerID][data.promotedName.Value] = bitboards[(Color)data.playerID][data.promotedName.Value].SetBit(data.to);
+					bitboards[data.playerID][data.promotedName.Value] = bitboards[data.playerID][data.promotedName.Value].SetBit(data.to);
 				else PIECE = PIECE.SetBit(data.to);
 				#endregion
 
@@ -849,22 +853,22 @@ namespace BoardGames.KingChess
 					if (data.enpassantCapturedIndex != null)
 					{
 						int bitIndex = data.enpassantCapturedIndex.Value;
-						OPPONENT_PIECE = OPPONENT_PIECE.ClearBit(bitIndex);
+						ENEMY_PIECE = ENEMY_PIECE.ClearBit(bitIndex);
 						var index = bitIndex.ToMailBoxIndex();
 						mailBox[index.x][index.y] = null;
 					}
-					else OPPONENT_PIECE = OPPONENT_PIECE.ClearBit(data.to);
+					else ENEMY_PIECE = ENEMY_PIECE.ClearBit(data.to);
 				#endregion
 
 				if (data.castling != MoveData.Castling.None)
 				{
-					var r = CASTLING_ROOK_MOVEMENTS[(Color)data.playerID][data.castling];
-					ulong R = bitboards[(Color)data.playerID][PieceName.Rook];
+					var r = CASTLING_ROOK_MOVEMENTS[data.playerID][data.castling];
+					ulong R = bitboards[data.playerID][PieceName.Rook];
 					R = R.ClearBit(r.from);
 					mailBox[r.m_from.x][r.m_from.y] = null;
 					R = R.SetBit(r.to);
-					mailBox[r.m_to.x][r.m_to.y] = ((Color)data.playerID, PieceName.Rook);
-					bitboards[(Color)data.playerID][PieceName.Rook] = R;
+					mailBox[r.m_to.x][r.m_to.y] = (data.playerID, PieceName.Rook);
+					bitboards[data.playerID][PieceName.Rook] = R;
 				}
 				#endregion
 			}
@@ -872,11 +876,11 @@ namespace BoardGames.KingChess
 			{
 				#region UNDO
 				PIECE = PIECE.SetBit(data.from);
-				mailBox[from.x][from.y] = ((Color)data.playerID, data.name);
+				mailBox[from.x][from.y] = (data.playerID, data.name);
 
 				#region Lấy quân {data.name} hoặc {data.promotedName} ra khỏi ô vị trí {to}
 				if (data.promotedName != null)
-					bitboards[(Color)data.playerID][data.promotedName.Value] = bitboards[(Color)data.playerID][data.promotedName.Value].ClearBit(data.to);
+					bitboards[data.playerID][data.promotedName.Value] = bitboards[data.playerID][data.promotedName.Value].ClearBit(data.to);
 				else PIECE = PIECE.ClearBit(data.to);
 				#endregion
 
@@ -887,13 +891,13 @@ namespace BoardGames.KingChess
 					{
 						mailBox[to.x][to.y] = null;
 						var bitIndex = data.enpassantCapturedIndex.Value;
-						OPPONENT_PIECE = OPPONENT_PIECE.SetBit(bitIndex);
+						ENEMY_PIECE = ENEMY_PIECE.SetBit(bitIndex);
 						var index = bitIndex.ToMailBoxIndex();
 						mailBox[index.x][index.y] = (1 - data.playerID, PieceName.Pawn);
 					}
 					else
 					{
-						OPPONENT_PIECE = OPPONENT_PIECE.SetBit(data.to);
+						ENEMY_PIECE = ENEMY_PIECE.SetBit(data.to);
 						mailBox[to.x][to.y] = (1 - data.playerID, data.capturedName.Value);
 					}
 				}
@@ -902,19 +906,19 @@ namespace BoardGames.KingChess
 
 				if (data.castling != MoveData.Castling.None)
 				{
-					var r = CASTLING_ROOK_MOVEMENTS[(Color)data.playerID][data.castling];
-					ulong R = bitboards[(Color)data.playerID][PieceName.Rook];
+					var r = CASTLING_ROOK_MOVEMENTS[data.playerID][data.castling];
+					ulong R = bitboards[data.playerID][PieceName.Rook];
 					R = R.ClearBit(r.to);
 					mailBox[r.m_to.x][r.m_to.y] = null;
 					R = R.SetBit(r.from);
-					mailBox[r.m_from.x][r.m_from.y] = ((Color)data.playerID, PieceName.Rook);
-					bitboards[(Color)data.playerID][PieceName.Rook] = R;
+					mailBox[r.m_from.x][r.m_from.y] = (data.playerID, PieceName.Rook);
+					bitboards[data.playerID][PieceName.Rook] = R;
 				}
 				#endregion
 			}
 
-			bitboards[(Color)data.playerID][data.name] = PIECE;
-			if (data.capturedName != null) bitboards[1 - data.playerID][data.capturedName.Value] = OPPONENT_PIECE;
+			bitboards[data.playerID][data.name] = PIECE;
+			if (data.capturedName != null) bitboards[1 - data.playerID][data.capturedName.Value] = ENEMY_PIECE;
 		}
 		#endregion
 	}

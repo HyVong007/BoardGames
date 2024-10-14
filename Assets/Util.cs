@@ -15,6 +15,28 @@ namespace BoardGames
 {
 	public static class Util
 	{
+		/// <summary>
+		/// Luôn  lấy instance bằng lệnh: <code>using var cache = Cache&lt;T&gt;.Get();</code>
+		/// để đảm bảo cache dispose khi hết sử dụng
+		/// </summary>
+		private sealed class Cache<T> : IDisposable
+		{
+			#region object pool
+			private static readonly CSObjectPool<Cache<T>> pool = new();
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public static Cache<T> Get() => pool.Get();
+
+
+			[MethodImpl(MethodImplOptions.AggressiveInlining)]
+			public void Dispose() => pool.Recycle(this);
+			#endregion
+
+			public readonly List<T> list = new();
+		}
+
+
 		public static bool Contains<T>(this T[] array, T item)
 		{
 			for (int i = 0; i < array.Length; ++i) if (array[i].Equals(item)) return true;
@@ -124,17 +146,20 @@ namespace BoardGames
 		}
 
 
-		public static IEnumerable<T> Random<T>(this IReadOnlyCollection<T> collection)
+		public static IEnumerable<T> Random<T>(this IEnumerable<T> collection)
 		{
-			var tmp = new List<T>(collection);
+			using var cache = Cache<T>.Get();
+			var list = cache.list;
+			list.Clear();
+			list.AddRange(collection);
 			T item;
 
 			do
 			{
-				item = tmp[UnityEngine.Random.Range(0, tmp.Count)];
-				tmp.Remove(item);
+				item = list[UnityEngine.Random.Range(0, list.Count)];
+				list.Remove(item);
 				yield return item;
-			} while (tmp.Count != 0);
+			} while (list.Count != 0);
 		}
 
 
@@ -262,6 +287,24 @@ namespace BoardGames
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public IEnumerator<T> GetEnumerator() => (visibleObj as IEnumerable<T>).GetEnumerator();
+	}
+
+
+
+	/// <summary>
+	/// Method T.Dispose() phải gọi Recycle(<see langword="this"/>)
+	/// </summary>
+	/// <typeparam name="T"></typeparam>
+	public sealed class CSObjectPool<T> where T : class, IDisposable, new()
+	{
+		private readonly Stack<T> availables = new();
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public T Get() => availables.TryPop(out T cache) ? cache : new();
+
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public void Recycle(T item) => availables.Push(item);
 	}
 
 

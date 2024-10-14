@@ -7,7 +7,8 @@ public class Test : MonoBehaviour
 {
 	private void Start()
 	{
-		MoveType p;
+		var x = new ReadOnlyArray<int>(new[] { 1, 2, 3 });
+		Util.Random(x);
 	}
 }
 

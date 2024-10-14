@@ -1,6 +1,6 @@
-﻿using NaughtyAttributes.Test;
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
@@ -117,6 +117,14 @@ namespace BoardGames.ChineseChess
 		private readonly bool hiddenChessRule;
 
 
+		private static readonly int[] ARRAY_0_9 = new int[9], ARRAY_0_10 = new int[10];
+		static Core()
+		{
+			for (int i = 0; i < 9; ++i) ARRAY_0_9[i] = i;
+			for (int i = 0; i < 10; ++i) ARRAY_0_10[i] = i;
+		}
+
+
 		public Core(Piece?[][] mailBox = null)
 		{
 #if DEBUG
@@ -150,15 +158,7 @@ namespace BoardGames.ChineseChess
 
 
 		public static Piece?[][] CloneDefaultMailBox()
-		{
-			var result = new Piece?[9][];
-			for (int x = 0; x < 9; ++x)
-			{
-				result[x] = new Piece?[10];
-				for (int y = 0; y < 10; ++y) result[x][y] = DEFAULT_MAILBOX[x][y];
-			}
-			return result;
-		}
+			=> Util.NewArray(9, 10, (x, y) => DEFAULT_MAILBOX[x][y]);
 
 
 		public Piece? this[int x, int y] => mailBox[x][y];
@@ -188,27 +188,29 @@ namespace BoardGames.ChineseChess
 			var enemyColor = 1 - color;
 
 			#region Kiểm tra lộ mặt Tướng
-			var OpponentG = generalIndexes[enemyColor];
-			if (G.x == OpponentG.x)
+			var enemyG = generalIndexes[enemyColor];
+			if (G.x == enemyG.x)
 			{
 				var m = mailBox[G.x];
 				int DIR_Y = COLOR_FORWARD_VECTORS[color].y;
 				while (true)
 				{
-					if ((G.y += DIR_Y) == OpponentG.y) return true;
+					if ((G.y += DIR_Y) == enemyG.y) return true;
 					if (m[G.y] != null) break;
 				}
 			}
 			#endregion
 
 			G = generalIndexes[color];
-			for (int x = 0; x < 9; ++x)
-				for (int y = 0; y < 10; ++y)
+			foreach (int x in ARRAY_0_9.Random())
+				foreach (int y in ARRAY_0_10.Random())
 					if (mailBox[x][y]?.color == enemyColor)
 					{
 						var piece = mailBox[x][y].Value;
 						if (piece.name == PieceName.General) continue;
-						if (FindPseudoLegalMoves(enemyColor, piece.hidden ? DEFAULT_MAILBOX[x][y].Value.name : piece.name, new(x, y)).Contains(G)) return true;
+
+						foreach (var move in FindPseudoLegalMoves(enemyColor, piece.hidden ? DEFAULT_MAILBOX[x][y].Value.name : piece.name, new(x, y)))
+							if (move == G) return true;
 					}
 
 			return false;
@@ -227,7 +229,7 @@ namespace BoardGames.ChineseChess
 				{
 					if (mailBox[x][y] == null) { s += "   *   "; continue; }
 					var square = mailBox[x][y].Value;
-					s += $"   {(square.hidden ? "?" : (square.color == Color.Red ? PIECENAME_STRING_DICT[square.name] : PIECENAME_STRING_DICT[square.name].ToLower()))}   ";
+					s += $"   {(square.hidden ? "?" : (square.color == Color.Red ? PIECENAME_STRING[square.name] : PIECENAME_STRING[square.name].ToLower()))}   ";
 				}
 				s += "\n\n\n";
 			}
@@ -259,7 +261,7 @@ namespace BoardGames.ChineseChess
 					else
 					{
 						Console.ForegroundColor = square.color == Color.Red ? ConsoleColor.Red : ConsoleColor.Blue;
-						Console.Write($"   {PIECENAME_STRING_DICT[square.name]}   ");
+						Console.Write($"   {PIECENAME_STRING[square.name]}   ");
 					}
 				}
 				Console.WriteLine("\n\n");
@@ -270,7 +272,7 @@ namespace BoardGames.ChineseChess
 		}
 
 
-		private static readonly IReadOnlyDictionary<PieceName, string> PIECENAME_STRING_DICT = new Dictionary<PieceName, string>
+		private static readonly IReadOnlyDictionary<PieceName, string> PIECENAME_STRING = new Dictionary<PieceName, string>
 		{
 			[PieceName.General] = "G",
 			[PieceName.Advisor] = "A",
@@ -314,13 +316,11 @@ namespace BoardGames.ChineseChess
 			[Color.Red] = (0, 1),
 			[Color.Black] = (0, -1)
 		};
-		private readonly List<Vector2Int> pseudoList = new(90);
 
-		private Vector2Int[] FindPseudoLegalMoves(Color color, PieceName name, in Vector2Int index)
+		private IEnumerable<Vector2Int> FindPseudoLegalMoves(Color color, PieceName name, Vector2Int index)
 		{
 			var THIS_SIDE = SIDES[color];
 			var THIS_PALACE = PALACES[color];
-			pseudoList.Clear();
 			int x, y;
 
 			switch (name)
@@ -330,7 +330,7 @@ namespace BoardGames.ChineseChess
 					for (int d = 0; d < 4; ++d)
 					{
 						x = index.x + DPAD_VECTORS[d].x; y = index.y + DPAD_VECTORS[d].y;
-						if (THIS_PALACE.Contains(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
+						if (THIS_PALACE.Contains(x, y) && mailBox[x][y]?.color != color) yield return new(x, y);
 					}
 					break;
 				#endregion
@@ -342,7 +342,7 @@ namespace BoardGames.ChineseChess
 						x = index.x + CROSS_VECTORS[d].x; y = index.y + CROSS_VECTORS[d].y;
 						if (((!hiddenChessRule && THIS_PALACE.Contains(x, y))
 							|| (hiddenChessRule && InsideBoard(x, y)))
-							&& mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
+							&& mailBox[x][y]?.color != color) yield return new(x, y);
 					}
 					break;
 				#endregion
@@ -360,7 +360,7 @@ namespace BoardGames.ChineseChess
 						x += dir.x; y += dir.y;
 						if (((!hiddenChessRule && THIS_SIDE.Contains(x, y))
 							|| (hiddenChessRule && InsideBoard(x, y)))
-							&& mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
+							&& mailBox[x][y]?.color != color) yield return new(x, y);
 					}
 					break;
 				#endregion
@@ -376,7 +376,7 @@ namespace BoardGames.ChineseChess
 						for (int c = 0; c < 2; ++c)
 						{
 							int cx = x + crosses[c].x, cy = y + crosses[c].y;
-							if (InsideBoard(cx, cy) && mailBox[cx][cy]?.color != color) pseudoList.Add(new(cx, cy));
+							if (InsideBoard(cx, cy) && mailBox[cx][cy]?.color != color) yield return new(cx, cy);
 						}
 					}
 					break;
@@ -391,7 +391,7 @@ namespace BoardGames.ChineseChess
 						while (InsideBoard(x += dir.x, y += dir.y))
 						{
 							var c = mailBox[x][y]?.color;
-							if (c != color) pseudoList.Add(new(x, y));
+							if (c != color) yield return new(x, y);
 							if (c != null) break;
 						}
 					}
@@ -409,7 +409,7 @@ namespace BoardGames.ChineseChess
 							var c = mailBox[x][y]?.color;
 							if (c == null)
 							{
-								pseudoList.Add(new(x, y)); continue;
+								yield return new(x, y); continue;
 							}
 
 							while (InsideBoard(x += dir.x, y += dir.y))
@@ -417,7 +417,7 @@ namespace BoardGames.ChineseChess
 								var c2 = mailBox[x][y]?.color;
 								if (c2 == null) continue;
 
-								if (c2 != color) pseudoList.Add(new(x, y));
+								if (c2 != color) yield return new(x, y);
 								break;
 							}
 							break;
@@ -430,46 +430,37 @@ namespace BoardGames.ChineseChess
 					#region Pawn
 					var forward = COLOR_FORWARD_VECTORS[color];
 					x = index.x + forward.x; y = index.y + forward.y;
-					if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
+					if (InsideBoard(x, y) && mailBox[x][y]?.color != color) yield return new(x, y);
 					if (THIS_SIDE.Contains(index)) break;
 
 					for (int d = 0; d < 2; ++d)
 					{
 						x = index.x + DPAD_VECTORS[d].x; y = index.y + DPAD_VECTORS[d].y;
-						if (InsideBoard(x, y) && mailBox[x][y]?.color != color) pseudoList.Add(new(x, y));
+						if (InsideBoard(x, y) && mailBox[x][y]?.color != color) yield return new(x, y);
 					}
 					break;
 					#endregion
 			}
-
-			return pseudoList.ToArray();
 		}
 		#endregion
 
 
 		#region FindLegalMoves
-		private readonly List<Vector2Int> legalList = new(90);
-
-		private Vector2Int[] FindLegalMoves(Color color, PieceName name, in Vector2Int index)
+		private IEnumerable<Vector2Int> FindLegalMoves(Color color, PieceName name, Vector2Int index)
 		{
-			var moves = FindPseudoLegalMoves(color, name, index);
-			if (moves.Length == 0) return Array.Empty<Vector2Int>();
-
-			legalList.Clear();
-			for (int m = 0; m < moves.Length; ++m)
+			foreach (var to in FindPseudoLegalMoves(color, name, index))
 			{
-				var to = moves[m];
 				var data = new MoveData(this, index, to);
 				PseudoMove(data, undo: false);
-				if (!GeneralIsChecked(color)) legalList.Add(to);
+				bool check = false;
+				if (GeneralIsChecked(color)) check = true;
 				PseudoMove(data, undo: true);
+				if (!check) yield return to;
 			}
-
-			return legalList.ToArray();
 		}
 
 
-		public Vector2Int[] FindLegalMoves(in int x, in int y)
+		public IEnumerable<Vector2Int> FindLegalMoves(int x, int y)
 		{
 			var piece = mailBox[x][y].Value;
 			return FindLegalMoves(piece.color, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new Vector2Int(x, y));
@@ -492,12 +483,12 @@ namespace BoardGames.ChineseChess
 				states[data.piece.color] = State.Normal;
 				if (oldState == State.Check) onStateChanged?.Invoke(data.piece.color, State.Normal);
 
-				for (int x = 0; x < 9; ++x)
-					for (int y = 0; y < 10; ++y)
+				foreach (int x in ARRAY_0_9.Random())
+					foreach (int y in ARRAY_0_10.Random())
 						if (mailBox[x][y]?.color == enemyColor)
 						{
 							var piece = mailBox[x][y].Value;
-							if (FindLegalMoves(enemyColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new(x, y)).Length != 0)
+							if (FindLegalMoves(enemyColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new(x, y)).Any())
 							{
 								if (GeneralIsChecked(enemyColor))
 								{
