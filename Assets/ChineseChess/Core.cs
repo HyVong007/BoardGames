@@ -117,11 +117,12 @@ namespace BoardGames.ChineseChess
 		private readonly bool hiddenChessRule;
 
 
-		private static readonly int[] ARRAY_0_9 = new int[9], ARRAY_0_10 = new int[10];
+		private static readonly (int x, int y)[] ALL_BOARD_INDEXS = new (int x, int y)[90];
 		static Core()
 		{
-			for (int i = 0; i < 9; ++i) ARRAY_0_9[i] = i;
-			for (int i = 0; i < 10; ++i) ARRAY_0_10[i] = i;
+			for (int index = 0, x = 0; x < 9; ++x)
+				for (int y = 0; y < 10; ++y)
+					ALL_BOARD_INDEXS[index++] = (x, y);
 		}
 
 
@@ -157,6 +158,7 @@ namespace BoardGames.ChineseChess
 		}
 
 
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Piece?[][] CloneDefaultMailBox()
 			=> Util.NewArray(9, 10, (x, y) => DEFAULT_MAILBOX[x][y]);
 
@@ -195,23 +197,22 @@ namespace BoardGames.ChineseChess
 				int DIR_Y = COLOR_FORWARD_VECTORS[color].y;
 				while (true)
 				{
-					if ((G.y += DIR_Y) == enemyG.y) return true;
-					if (m[G.y] != null) break;
+					if (m[G.y += DIR_Y] != null || m[enemyG.y -= DIR_Y] != null) break;
+					if (Mathf.Abs(G.y - enemyG.y) == 1) return true;
 				}
 			}
 			#endregion
 
 			G = generalIndexes[color];
-			foreach (int x in ARRAY_0_9.Random())
-				foreach (int y in ARRAY_0_10.Random())
-					if (mailBox[x][y]?.color == enemyColor)
-					{
-						var piece = mailBox[x][y].Value;
-						if (piece.name == PieceName.General) continue;
+			foreach (var (x, y) in ALL_BOARD_INDEXS.Random())
+				if (mailBox[x][y]?.color == enemyColor)
+				{
+					var piece = mailBox[x][y].Value;
+					if (piece.name == PieceName.General) continue;
 
-						foreach (var move in FindPseudoLegalMoves(enemyColor, piece.hidden ? DEFAULT_MAILBOX[x][y].Value.name : piece.name, new(x, y)))
-							if (move == G) return true;
-					}
+					foreach (var move in FindPseudoLegalMoves(enemyColor, piece.hidden ? DEFAULT_MAILBOX[x][y].Value.name : piece.name, new(x, y)))
+						if (move == G) return true;
+				}
 
 			return false;
 		}
@@ -483,22 +484,21 @@ namespace BoardGames.ChineseChess
 				states[data.piece.color] = State.Normal;
 				if (oldState == State.Check) onStateChanged?.Invoke(data.piece.color, State.Normal);
 
-				foreach (int x in ARRAY_0_9.Random())
-					foreach (int y in ARRAY_0_10.Random())
-						if (mailBox[x][y]?.color == enemyColor)
+				foreach (var (x, y) in ALL_BOARD_INDEXS.Random())
+					if (mailBox[x][y]?.color == enemyColor)
+					{
+						var piece = mailBox[x][y].Value;
+						if (FindLegalMoves(enemyColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new(x, y)).Any())
 						{
-							var piece = mailBox[x][y].Value;
-							if (FindLegalMoves(enemyColor, !piece.hidden ? piece.name : DEFAULT_MAILBOX[x][y].Value.name, new(x, y)).Any())
+							if (GeneralIsChecked(enemyColor))
 							{
-								if (GeneralIsChecked(enemyColor))
-								{
-									states[enemyColor] = State.Check;
-									onStateChanged?.Invoke(enemyColor, State.Check);
-								}
-
-								goto FINISH_UPDATING_STATE;
+								states[enemyColor] = State.Check;
+								onStateChanged?.Invoke(enemyColor, State.Check);
 							}
+
+							goto FINISH_UPDATING_STATE;
 						}
+					}
 
 				states[enemyColor] = State.CheckMate;
 				onStateChanged?.Invoke(enemyColor, State.CheckMate);

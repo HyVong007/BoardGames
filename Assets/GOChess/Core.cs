@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using UnityEngine;
 
 
@@ -121,7 +120,7 @@ namespace BoardGames.GOChess
 			for (int x = 0; x < rect.width; ++x)
 				for (int y = 0; y < rect.height; ++y)
 					if (mailBox[x][y] != null)
-						Move(new MoveData(this, mailBox[x][y].Value, new(x, y)), MoveType.Play);
+						Move(MoveType.Play, new(this, mailBox[x][y].Value, new(x, y)));
 		}
 
 
@@ -228,10 +227,11 @@ namespace BoardGames.GOChess
 
 			color_land_point[Color.White].Clear();
 			color_land_point[Color.Black].Clear();
-			for (int d = 0; d < 4; ++d)
+			foreach (var dir in DIRECTIONS.Random())
 			{
-				var pos = index + DIRECTIONS[d];
+				var pos = index + dir;
 				if (!rect.Contains(pos)) continue;
+
 				var land = mailBox[pos.x][pos.y];
 				if (land == null) return true;
 
@@ -251,15 +251,15 @@ namespace BoardGames.GOChess
 
 
 		#region Move
-		public event Action<Vector3Int, Color> drawPieceGUI;
-		public event Action<Vector3Int> clearPieceGUI;
+		public event Action<Vector3Int, Color> drawPiece;
+		public event Action<Vector3Int> clearPiece;
 		/// <summary>
 		/// point là số tiếp điểm của land với ô đang kiểm tra<br/>
 		/// </summary>
 		private readonly Dictionary<Land, byte> land_point = new();
 
 
-		public void Move(in MoveData data, MoveType mode)
+		public void Move(MoveType mode, in MoveData data)
 		{
 			pieceCounts[Color.White] = pieceCounts[Color.Black] = -1;
 			land_point.Clear();
@@ -272,7 +272,7 @@ namespace BoardGames.GOChess
 				newLand.indexes.Add(data.index);
 				newLand.airHole = data.emptyHole;
 				lands[newLand.color].Add(newLand);
-				drawPieceGUI?.Invoke(data.index.ToVector3Int(), data.playerID);
+				drawPiece?.Invoke(data.index.ToVector3Int(), data.playerID);
 
 				foreach (var ally_point in data.color_land_point[newLand.color])
 				{
@@ -297,11 +297,11 @@ namespace BoardGames.GOChess
 					// xóa các quân cờ của enemy và tăng lổ thở cho các land xung quanh (nếu có, != enemy)
 					var enemy = enemy_point.Key;
 					lands[enemy.color].Remove(enemy);
-					for (int i = enemy.indexes.Count - 1; i >= 0; --i)
+					for (int i = 0; i < enemy.indexes.Count; ++i)
 					{
 						var index = enemy.indexes[i];
 						mailBox[index.x][index.y] = null;
-						clearPieceGUI?.Invoke(index.ToVector3Int());
+						clearPiece?.Invoke(index.ToVector3Int());
 						for (int d = 0; d < 4; ++d)
 						{
 							var surround = index + DIRECTIONS[d];
@@ -325,7 +325,7 @@ namespace BoardGames.GOChess
 				#region UNDO
 				lands[data.playerID].Remove(mailBox[data.index.x][data.index.y]);
 				mailBox[data.index.x][data.index.y] = null;
-				clearPieceGUI?.Invoke(data.index.ToVector3Int());
+				clearPiece?.Invoke(data.index.ToVector3Int());
 
 				#region Khôi phục ally land vào bàn cờ
 				foreach (var ally in data.color_land_point[data.playerID].Keys)
@@ -352,7 +352,7 @@ namespace BoardGames.GOChess
 					{
 						var index = enemy.indexes[i];
 						mailBox[index.x][index.y] = enemy;
-						drawPieceGUI?.Invoke(index.ToVector3Int(), enemy.color);
+						drawPiece?.Invoke(index.ToVector3Int(), enemy.color);
 						for (int d = 0; d < 4; ++d)
 						{
 							var surround = index + DIRECTIONS[d];

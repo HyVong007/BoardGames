@@ -601,7 +601,6 @@ namespace BoardGames.KingChess
 
 
 		#region FindLegalMoves: Tìm các nước đi hợp lệ sau khi đã kiểm tra King xem có bị chiếu.
-		//private readonly List<int> list = new(64);
 		public readonly History history;
 
 		/// <summary>
@@ -613,7 +612,6 @@ namespace BoardGames.KingChess
 		/// <returns></returns>
 		private IEnumerable<int> FindLegalMoves(Color color, PieceName name, int? index)
 		{
-			//list.Clear();
 			var lastMoveData = history.moveCount != 0 ? history[history.moveCount - 1] : (MoveData?)null;
 
 			#region {index} != null : Chỉ tìm move của 1 quân cờ tại index

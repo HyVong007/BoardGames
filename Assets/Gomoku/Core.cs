@@ -120,6 +120,7 @@ namespace BoardGames.Gomoku
 					Console.ForegroundColor = symbol == Symbol.O ? ConsoleColor.Red : symbol == Symbol.X ? ConsoleColor.Green : ConsoleColor.DarkYellow;
 					Console.Write(symbol != null ? $"  {symbol}  " : "  *  ");
 				}
+
 				Console.WriteLine("\n");
 			}
 
@@ -145,7 +146,7 @@ namespace BoardGames.Gomoku
 		};
 
 
-		public void Move(MoveData data, MoveType mode)
+		public void Move(MoveType mode, in MoveData data)
 		{
 			if (mode != MoveType.Undo)
 			{

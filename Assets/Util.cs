@@ -16,8 +16,8 @@ namespace BoardGames
 	public static class Util
 	{
 		/// <summary>
-		/// Luôn  lấy instance bằng lệnh: <code>using var cache = Cache&lt;T&gt;.Get();</code>
-		/// để đảm bảo cache dispose khi hết sử dụng
+		/// Luôn  lấy instance bằng lệnh: <code>using var obj = Cache&lt;T&gt;.Get();</code>
+		/// để đảm bảo obj dispose khi hết sử dụng
 		/// </summary>
 		private sealed class Cache<T> : IDisposable
 		{
@@ -37,11 +37,29 @@ namespace BoardGames
 		}
 
 
-		public static bool Contains<T>(this T[] array, T item)
+		#region Global Dictionary
+		private static class GlobalDict<TKey, TValue>
 		{
-			for (int i = 0; i < array.Length; ++i) if (array[i].Equals(item)) return true;
-			return false;
+			public static readonly Dictionary<TKey, TValue> dict;
+
+			static GlobalDict() => (dicts as List<IDictionary>).Add(dict = new());
 		}
+		private static readonly IReadOnlyList<IDictionary> dicts = new List<IDictionary>();
+
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Get<TKey, TValue>(this TKey key, out TValue value) => value = GlobalDict<TKey, TValue>.dict[key];
+
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static void Set<TKey, TValue>(this TKey key, TValue value) => GlobalDict<TKey, TValue>.dict[key] = value;
+
+
+		public static void ClearGlobalDicts()
+		{
+			foreach (var dict in dicts) dict.Clear();
+		}
+		#endregion
 
 
 		#region Converts
@@ -77,6 +95,17 @@ namespace BoardGames
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
 		public static Vector3Int ToVector3Int(this in Vector3 value) => new((int)value.x, (int)value.y, 0);
 		#endregion
+
+
+		public static bool Contains<T>(this T[] array, T item)
+		{
+			for (int i = 0; i < array.Length; ++i) if (array[i].Equals(item)) return true;
+			return false;
+		}
+
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public static bool Contains(this in Rect rect, int x, int y) => rect.Contains(new Vector2(x, y));
 
 
 		public static async UniTask Move(this Transform transform, Vector3 dest, float speed, CancellationToken token = default)
@@ -161,10 +190,6 @@ namespace BoardGames
 				yield return item;
 			} while (list.Count != 0);
 		}
-
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public static bool Contains(this in Rect rect, int x, int y) => rect.Contains(new Vector2(x, y));
 	}
 
 
@@ -300,11 +325,11 @@ namespace BoardGames
 		private readonly Stack<T> availables = new();
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public T Get() => availables.TryPop(out T cache) ? cache : new();
+		public T Get() => availables.TryPop(out T obj) ? obj : new();
 
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public void Recycle(T item) => availables.Push(item);
+		public void Recycle(T obj) => availables.Push(obj);
 	}
 
 
@@ -328,7 +353,7 @@ namespace BoardGames
 
 		private static string APP_NAME;
 #if !UNITY_EDITOR && UNITY_STANDALONE_WIN
-		[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
+		//[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSplashScreen)]
 #endif
 		[System.Diagnostics.CodeAnalysis.SuppressMessage("CodeQuality", "IDE0051:Remove unused private members", Justification = "<Pending>")]
 		private static void Init()
