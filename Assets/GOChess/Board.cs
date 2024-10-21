@@ -39,6 +39,8 @@ namespace BoardGames.GOChess
 
 
 		private Color color = Color.White;
+		[SerializeField] private Transform flag;
+
 		private void OnPlayerClick(Vector2 pixel)
 		{
 			var index = Camera.main.ScreenToWorldPoint(pixel).ToVector2Int();
@@ -46,6 +48,7 @@ namespace BoardGames.GOChess
 
 			core.Move(MoveType.Play, new(core, color, index));
 			pieceMap.SetTile(index.ToVector3Int(), pieceTiles[color]);
+			flag.position = index.ToVector3();
 			color = 1 - color;
 		}
 	}

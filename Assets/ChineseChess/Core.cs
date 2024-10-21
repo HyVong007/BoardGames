@@ -290,11 +290,11 @@ namespace BoardGames.ChineseChess
 		private static readonly IReadOnlyDictionary<Color, Rect> SIDES = new Dictionary<Color, Rect>
 		{
 			[Color.Red] = new Rect(0, 0, 9, 5),
-			[Color.Black] = new Rect(0, 5, 9, 10)
+			[Color.Black] = new Rect(0, 5, 9, 5)
 		}, PALACES = new Dictionary<Color, Rect>
 		{
-			[Color.Red] = new Rect(3, 0, 6, 3),
-			[Color.Black] = new Rect(3, 7, 6, 10)
+			[Color.Red] = new Rect(3, 0, 3, 3),
+			[Color.Black] = new Rect(3, 7, 3, 3)
 		};
 
 		private static readonly (int x, int y)[] DPAD_VECTORS = new (int x, int y)[]
@@ -452,10 +452,10 @@ namespace BoardGames.ChineseChess
 			foreach (var to in FindPseudoLegalMoves(color, name, index))
 			{
 				var data = new MoveData(this, index, to);
-				PseudoMove(data, undo: false);
+				PseudoMove(undo: false, data);
 				bool check = false;
 				if (GeneralIsChecked(color)) check = true;
-				PseudoMove(data, undo: true);
+				PseudoMove(undo: true, data);
 				if (!check) yield return to;
 			}
 		}
@@ -470,10 +470,10 @@ namespace BoardGames.ChineseChess
 
 
 		#region Move
-		public void Move(in MoveData data, MoveType mode)
+		public void Move(MoveType mode, in MoveData data)
 		{
 			bool undo = mode == MoveType.Undo;
-			PseudoMove(data, undo);
+			PseudoMove(undo, data);
 
 			#region Cập nhật State
 			var enemyColor = 1 - data.piece.color;
@@ -524,7 +524,7 @@ namespace BoardGames.ChineseChess
 		}
 
 
-		private void PseudoMove(in MoveData data, bool undo)
+		private void PseudoMove(bool undo, in MoveData data)
 		{
 			if (!undo)
 			{

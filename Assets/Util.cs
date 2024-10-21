@@ -334,6 +334,163 @@ namespace BoardGames
 
 
 
+	[Serializable]
+	public sealed class ValueWrapper<T> where T : struct
+	{
+		public T value;
+
+		public override int GetHashCode() => value.GetHashCode();
+
+		public override bool Equals(object obj) => value.Equals(obj);
+	}
+
+
+
+	public interface IMoveData<I> where I : struct, Enum
+	{
+		I playerID { get; }
+	}
+
+
+
+	public enum MoveType
+	{
+		Play, Undo, Redo
+	}
+
+
+
+	/// <summary>
+	/// Lưu lại lịch sử các nước đi và cho phép Undo/ Redo.<br/>
+	/// Trạng thái bàn chơi chỉ được thay đổi thông qua Play, Undo và Redo
+	/// </summary>
+	public sealed class History<I, D> where I : struct, Enum where D : struct, IMoveData<I>
+	{
+		private readonly List<D> recentMoves = new();
+		private readonly List<D[]> undoneMoves = new();
+		/// <summary>
+		/// Số lượng nước đã đi (Play/Redo).
+		/// </summary>
+		public int moveCount => recentMoves.Count;
+		public D this[int index] => recentMoves[index];
+
+		/// <summary>
+		/// Thực thi 1 nước đi (Play/Undo/Redo)<para/>
+		/// Chú ý: không nên sử dụng <see cref="History"/> trong event vì trạng thái <see cref="History"/> đang không hợp lệ !
+		/// </summary>
+		public event Action<MoveType, D> execute;
+
+		/// <summary>
+		/// Flags tối ưu cho CanUndo và CanRedo
+		/// </summary>
+		private readonly IReadOnlyDictionary<MoveType, Dictionary<I, bool>> flags = new Dictionary<MoveType, Dictionary<I, bool>>
+		{
+			[MoveType.Undo] = new(),
+			[MoveType.Redo] = new()
+		};
+
+
+		public History() { }
+
+
+		public History(History<I, D> history)
+		{
+			recentMoves.AddRange(history.recentMoves);
+			undoneMoves.AddRange(history.undoneMoves);
+			int i = 0;
+			foreach (var moves in history.undoneMoves)
+				Array.Copy(moves, undoneMoves[i++] = new D[moves.Length], moves.Length);
+		}
+
+
+		public void Play(in D data)
+		{
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
+			undoneMoves.Clear();
+			if (recentMoves.Count == ushort.MaxValue) recentMoves.RemoveAt(0);
+			recentMoves.Add(data);
+			execute(MoveType.Play, data);
+		}
+
+
+		public bool CanUndo(I playerID)
+		{
+			var f = flags[MoveType.Undo];
+			if (f.TryGetValue(playerID, out bool value)) return value;
+
+			for (int i = recentMoves.Count - 1; i >= 0; --i)
+				if (recentMoves[i].playerID.Equals(playerID)) return f[playerID] = true;
+
+			return f[playerID] = false;
+		}
+
+
+		private readonly List<D> tmpMoves = new();
+		public bool Undo(I playerID)
+		{
+			if (!CanUndo(playerID)) return false;
+
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
+			tmpMoves.Clear();
+			I tmpID;
+
+			do
+			{
+				var move = recentMoves[^1];
+				recentMoves.RemoveAt(recentMoves.Count - 1);
+				tmpMoves.Add(move);
+				execute(MoveType.Undo, move);
+				tmpID = move.playerID;
+			} while (!tmpID.Equals(playerID));
+			undoneMoves.Add(tmpMoves.ToArray());
+			return true;
+		}
+
+
+		public bool CanRedo(I playerID)
+		{
+			var f = flags[MoveType.Redo];
+			if (f.TryGetValue(playerID, out bool value)) return value;
+
+			for (int i = undoneMoves.Count - 1; i >= 0; --i)
+			{
+				var moves = undoneMoves[i];
+				if (moves[^1].playerID.Equals(playerID)) return f[playerID] = true;
+			}
+
+			return f[playerID] = false;
+		}
+
+
+		public bool Redo(I playerID)
+		{
+			if (!CanRedo(playerID)) return false;
+
+			flags[MoveType.Undo].Clear();
+			flags[MoveType.Redo].Clear();
+			I tmpID;
+
+			do
+			{
+				var moves = undoneMoves[^1];
+				undoneMoves.RemoveAt(undoneMoves.Count - 1);
+				for (int i = moves.Length - 1; i >= 0; --i)
+				{
+					var move = moves[i];
+					execute(MoveType.Redo, move);
+					recentMoves.Add(move);
+				}
+
+				tmpID = moves[^1].playerID;
+			} while (!tmpID.Equals(playerID));
+			return true;
+		}
+	}
+
+
+
 	public static class WinStandalone
 	{
 		private static int handle;
@@ -381,7 +538,6 @@ namespace BoardGames
 			RESTORE = 9,
 			SHOWDEFAULT = 10
 		}
-
 
 
 		private class WindowFinder
@@ -601,163 +757,6 @@ namespace BoardGames
 
 			[DllImport("user32.dll", EntryPoint = "SetWindowLongPtr")]
 			private static extern IntPtr SetWindowLongPtr64(HandleRef hWnd, int nIndex, IntPtr dwNewLong);
-		}
-	}
-
-
-
-	[Serializable]
-	public sealed class ValueWrapper<T> where T : struct
-	{
-		public T value;
-
-		public override int GetHashCode() => value.GetHashCode();
-
-		public override bool Equals(object obj) => value.Equals(obj);
-	}
-
-
-
-	public interface IMoveData<I> where I : struct, Enum
-	{
-		I playerID { get; }
-	}
-
-
-
-	public enum MoveType
-	{
-		Play, Undo, Redo
-	}
-
-
-
-	/// <summary>
-	/// Lưu lại lịch sử các nước đi và cho phép Undo/ Redo.<br/>
-	/// Trạng thái bàn chơi chỉ được thay đổi thông qua Play, Undo và Redo
-	/// </summary>
-	public sealed class History<I, D> where I : struct, Enum where D : struct, IMoveData<I>
-	{
-		private readonly List<D> recentMoves = new();
-		private readonly List<D[]> undoneMoves = new();
-		/// <summary>
-		/// Số lượng nước đã đi (Play/Redo).
-		/// </summary>
-		public int moveCount => recentMoves.Count;
-		public D this[int index] => recentMoves[index];
-
-		/// <summary>
-		/// Thực thi 1 nước đi (Play/Undo/Redo)<para/>
-		/// Chú ý: không nên sử dụng <see cref="History"/> trong event vì trạng thái <see cref="History"/> đang không hợp lệ !
-		/// </summary>
-		public event Action<MoveType, D> execute;
-
-		/// <summary>
-		/// Flags tối ưu cho CanUndo và CanRedo
-		/// </summary>
-		private readonly IReadOnlyDictionary<MoveType, Dictionary<I, bool>> flags = new Dictionary<MoveType, Dictionary<I, bool>>
-		{
-			[MoveType.Undo] = new(),
-			[MoveType.Redo] = new()
-		};
-
-
-		public History() { }
-
-
-		public History(History<I, D> history)
-		{
-			recentMoves.AddRange(history.recentMoves);
-			undoneMoves.AddRange(history.undoneMoves);
-			int i = 0;
-			foreach (var moves in history.undoneMoves)
-				Array.Copy(moves, undoneMoves[i++] = new D[moves.Length], moves.Length);
-		}
-
-
-		public void Play(in D data)
-		{
-			flags[MoveType.Undo].Clear();
-			flags[MoveType.Redo].Clear();
-			undoneMoves.Clear();
-			if (recentMoves.Count == ushort.MaxValue) recentMoves.RemoveAt(0);
-			recentMoves.Add(data);
-			execute(MoveType.Play, data);
-		}
-
-
-		public bool CanUndo(I playerID)
-		{
-			var f = flags[MoveType.Undo];
-			if (f.TryGetValue(playerID, out bool value)) return value;
-
-			for (int i = recentMoves.Count - 1; i >= 0; --i)
-				if (recentMoves[i].playerID.Equals(playerID)) return f[playerID] = true;
-
-			return f[playerID] = false;
-		}
-
-
-		private readonly List<D> tmpMoves = new();
-		public bool Undo(I playerID)
-		{
-			if (!CanUndo(playerID)) return false;
-
-			flags[MoveType.Undo].Clear();
-			flags[MoveType.Redo].Clear();
-			tmpMoves.Clear();
-			I tmpID;
-
-			do
-			{
-				var move = recentMoves[^1];
-				recentMoves.RemoveAt(recentMoves.Count - 1);
-				tmpMoves.Add(move);
-				execute(MoveType.Undo, move);
-				tmpID = move.playerID;
-			} while (!tmpID.Equals(playerID));
-			undoneMoves.Add(tmpMoves.ToArray());
-			return true;
-		}
-
-
-		public bool CanRedo(I playerID)
-		{
-			var f = flags[MoveType.Redo];
-			if (f.TryGetValue(playerID, out bool value)) return value;
-
-			for (int i = undoneMoves.Count - 1; i >= 0; --i)
-			{
-				var moves = undoneMoves[i];
-				if (moves[^1].playerID.Equals(playerID)) return f[playerID] = true;
-			}
-
-			return f[playerID] = false;
-		}
-
-
-		public bool Redo(I playerID)
-		{
-			if (!CanRedo(playerID)) return false;
-
-			flags[MoveType.Undo].Clear();
-			flags[MoveType.Redo].Clear();
-			I tmpID;
-
-			do
-			{
-				var moves = undoneMoves[^1];
-				undoneMoves.RemoveAt(undoneMoves.Count - 1);
-				for (int i = moves.Length - 1; i >= 0; --i)
-				{
-					var move = moves[i];
-					execute(MoveType.Redo, move);
-					recentMoves.Add(move);
-				}
-
-				tmpID = moves[^1].playerID;
-			} while (!tmpID.Equals(playerID));
-			return true;
 		}
 	}
 }

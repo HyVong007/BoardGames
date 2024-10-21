@@ -28,6 +28,28 @@ namespace BoardGames
 	public sealed class Button : MonoBehaviour, IPointerDownHandler, IPointerUpHandler,
 		IBeginDragHandler, IDragHandler, IEndDragHandler
 	{
+		private static bool enableEnhancedTouch;
+		private void Awake()
+		{
+			if (!enableEnhancedTouch)
+			{
+				enableEnhancedTouch = true;
+				EnhancedTouchSupport.Enable();
+			}
+		}
+
+
+		private void OnDisable()
+		{
+			cancelDrag.Cancel();
+			cancelDrag.Dispose();
+			cancelDrag = new();
+			cancelLongPress.Cancel();
+			cancelLongPress.Dispose();
+			cancelLongPress = new();
+		}
+
+
 		#region Cài đặt thông số
 		[Flags]
 		public enum Event
@@ -82,9 +104,9 @@ namespace BoardGames
 #endif
 				m_event = value;
 				lastClick = null;
-				cancelLongPress?.Cancel();
-				cancelLongPress?.Dispose();
-				cancelLongPress = null;
+				cancelLongPress.Cancel();
+				cancelLongPress.Dispose();
+				cancelLongPress = new();
 				drag = false;
 			}
 		}
@@ -194,7 +216,7 @@ namespace BoardGames
 
 		private readonly List<Func<Vector2, bool>> list_beginDrag = new(), list_dragging = new();
 
-		private CancellationTokenSource cts;
+		private CancellationTokenSource cancelDrag = new();
 
 		private bool Δdrag;
 		private bool drag
@@ -220,16 +242,15 @@ namespace BoardGames
 					Touch.onFingerMove += OnFinger;
 					if (Mouse.current == null) return;
 
-					cts = new();
 					CheckMouseMove().Forget();
 				}
 				else
 				{
 					endDrag?.Invoke(pointerPosition);
 					Touch.onFingerMove -= OnFinger;
-					cts?.Cancel();
-					cts?.Dispose();
-					cts = null;
+					cancelDrag.Cancel();
+					cancelDrag.Dispose();
+					cancelDrag = new();
 				}
 
 
@@ -238,7 +259,7 @@ namespace BoardGames
 
 				async UniTask CheckMouseMove()
 				{
-					var token = cts.Token;
+					var token = cancelDrag.Token;
 					var pos = new Vector2(Mouse.current.position.x.ReadValue(), Mouse.current.position.y.ReadValue());
 					while (!token.IsCancellationRequested)
 					{
@@ -287,11 +308,7 @@ namespace BoardGames
 				|| (tmp.position - lastClick.Value.position).sqrMagnitude > clickMaxSqrDistance))
 				lastClick = null;
 
-			if ((@event & Event.LongPress) != 0)
-			{
-				cancelLongPress = new();
-				CheckLongPress(tmp).Forget();
-			}
+			if ((@event & Event.LongPress) != 0) CheckLongPress(tmp).Forget();
 
 			if ((@event & Event.Drag) != 0) drag = !drag;
 		}
@@ -320,6 +337,7 @@ namespace BoardGames
 			{
 				cancelLongPress.Cancel();
 				cancelLongPress.Dispose();
+				cancelLongPress = new();
 			}
 
 			if ((@event & Event.Drag) != 0 && dragType == DragType.Default) drag = false;
@@ -331,7 +349,7 @@ namespace BoardGames
 			: new(Mouse.current.position.x.ReadValue(), Mouse.current.position.y.ReadValue());
 
 
-		private CancellationTokenSource cancelLongPress;
+		private CancellationTokenSource cancelLongPress = new();
 		private async UniTask CheckLongPress(Data data)
 		{
 			var token = cancelLongPress.Token;

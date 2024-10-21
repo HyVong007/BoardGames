@@ -39,7 +39,7 @@ namespace BoardGames.GOChess
 		}
 
 
-		public override string ToString() => $"({color}, airHole= {airHole}, indexes.Count= {indexes.Count}), ";
+		public override string ToString() => $"({color}, airHole= {airHole}, moves.Count= {indexes.Count}), ";
 	}
 
 
@@ -229,10 +229,10 @@ namespace BoardGames.GOChess
 			color_land_point[Color.Black].Clear();
 			foreach (var dir in DIRECTIONS.Random())
 			{
-				var pos = index + dir;
-				if (!rect.Contains(pos)) continue;
+				var surround = index + dir;
+				if (!rect.Contains(surround)) continue;
 
-				var land = mailBox[pos.x][pos.y];
+				var land = mailBox[surround.x][surround.y];
 				if (land == null) return true;
 
 				if (color_land_point[land.color].ContainsKey(land)) ++color_land_point[land.color][land];

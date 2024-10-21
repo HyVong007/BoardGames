@@ -59,6 +59,8 @@ namespace BoardGames.Gomoku
 
 
 		private Symbol symbol;
+		[SerializeField] private Transform flag;
+
 		private void OnPlayerClick(Vector2 pixel)
 		{
 			var index = Camera.main.ScreenToWorldPoint(pixel).ToVector2Int();
@@ -66,6 +68,7 @@ namespace BoardGames.Gomoku
 
 			core.Move(MoveType.Play, new MoveData(symbol, index));
 			pieceMap.SetTile(index.ToVector3Int(), pieces[symbol]);
+			flag.position = index.ToVector3(); 
 			symbol = 1 - symbol;
 		}
 	}
