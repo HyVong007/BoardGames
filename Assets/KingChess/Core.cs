@@ -197,9 +197,9 @@ namespace BoardGames.KingChess
 
 		public Core(History history = null, (Color playerID, PieceName name)?[][] mailBox = null)
 		{
-			this.history = history ?? new History();
 			if (mailBox != null && (mailBox.Length != 8 || mailBox[0].Length != 8))
 				throw new ArgumentOutOfRangeException("mailBox phải là 8x8 !");
+			this.history = history ?? new History();
 			mailBox ??= DEFAULT_MAILBOX;
 
 			#region Khởi tạo {bitboards}, {mailBox}, {rookHistory}
@@ -229,7 +229,7 @@ namespace BoardGames.KingChess
 
 				++index;
 				return null;
-			});
+			}, false);
 			#endregion
 
 			kingHistory = new Dictionary<Color, (bool moved, int count)>
@@ -283,7 +283,7 @@ namespace BoardGames.KingChess
 		/// Vua <paramref name="playerID"/> có bị chiếu ?
 		///</summary>
 		/// <param name="playerID">Màu của quân Vua đang kiểm tra.</param>
-		private bool KingIsChecked(Color playerID, in MoveData lastMoveData)
+		private bool KingIsChecked(Color playerID, in MoveData? lastMoveData)
 		{
 			ulong king = bitboards[playerID][PieceName.King];
 			var enemyColor = 1 - playerID;
@@ -518,9 +518,9 @@ namespace BoardGames.KingChess
 					if (data.playerID != playerID && data.name == PieceName.Pawn
 						&& Mathf.Abs(data.from - data.to) == 16)
 					{
-						ulong opponentP = bitboards[data.playerID][PieceName.Pawn].GetBit(data.to);
-						if (((P << 1) & opponentP) != 0 || ((P >> 1) & opponentP) != 0)
-							result = result.SetBit(data.playerID == (int)Color.White ? data.from + 8 : data.to + 8);
+						ulong enemyP = bitboards[data.playerID][PieceName.Pawn].GetBit(data.to);
+						if (((P << 1) & enemyP) != 0 || ((P >> 1) & enemyP) != 0)
+							result = result.SetBit(data.playerID == Color.White ? data.from + 8 : data.to + 8);
 					}
 					#endregion
 
@@ -789,7 +789,7 @@ namespace BoardGames.KingChess
 				foreach (var name in ALL_PIECE_NAMES.Random())
 					if (FindLegalMoves(enemyColor, name, null).Any())
 					{
-						if (KingIsChecked(enemyColor, lastMoveData.Value))
+						if (KingIsChecked(enemyColor, lastMoveData))
 						{
 							states[enemyColor] = State.Check;
 							onStateChanged?.Invoke(enemyColor, State.Check);
@@ -936,7 +936,7 @@ namespace BoardGames.KingChess
 				for (int x = 0; x < 8; ++x, ++bit)
 				{
 					MAILBOX_TO_BIT[x][y] = bit;
-					BIT_TO_MAILBOX[bit] = new Vector2Int(x, y);
+					BIT_TO_MAILBOX[bit] = new(x, y);
 				}
 
 			for (int i = 0; i < 64; ++i) NOT_1_LS[i] = ~(_1_LS[i] = 1UL << i);

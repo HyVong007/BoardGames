@@ -39,14 +39,19 @@ namespace BoardGames
 		}
 
 
+		private void OnEnable()
+		{
+			cancelDrag = new();
+			cancelLongPress = new();
+		}
+
+
 		private void OnDisable()
 		{
 			cancelDrag.Cancel();
 			cancelDrag.Dispose();
-			cancelDrag = new();
 			cancelLongPress.Cancel();
 			cancelLongPress.Dispose();
-			cancelLongPress = new();
 		}
 
 
@@ -300,6 +305,7 @@ namespace BoardGames
 		public void OnPointerDown(PointerEventData eventData)
 		{
 			if (@event == 0) return;
+
 			tmp.position = eventData.position;
 			tmp.downTime = Time.time;
 
@@ -332,7 +338,7 @@ namespace BoardGames
 					}
 					else lastClick = tmp;
 			}
-
+			
 			if ((@event & Event.LongPress) != 0)
 			{
 				cancelLongPress.Cancel();

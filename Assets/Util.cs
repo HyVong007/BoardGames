@@ -139,15 +139,28 @@ namespace BoardGames
 		}
 
 
-		public static T[][] NewArray<T>(int sizeX, int sizeY, Func<int, int, T> initialize = null)
+		/// <summary>
+		/// <paramref name="loopXfirst"/>: Duyệt X trước, sau đó duyệt Y ? (Duyệt chữ N)<br/>
+		/// Nếu <see langword="false"/> thì duyệt Y trước, X sau (duyệt chữ Z ngược)
+		/// </summary>
+		public static T[][] NewArray<T>(int sizeX, int sizeY, Func<int, int, T> initialize = null, bool loopXfirst = true)
 		{
 			var array = new T[sizeX][];
+			if (initialize != null && !loopXfirst) goto LOOP_Y_FIRST;
+
 			for (int x = 0; x < sizeX; ++x)
 			{
 				array[x] = new T[sizeY];
 				if (initialize != null)
 					for (int y = 0; y < sizeY; ++y) array[x][y] = initialize(x, y);
 			}
+
+			return array;
+
+		LOOP_Y_FIRST:
+			for (int x = 0; x < sizeX; ++x) array[x] = new T[sizeY];
+			for (int y = 0; y < sizeY; ++y)
+				for (int x = 0; x < sizeX; ++x) array[x][y] = initialize(x, y);
 
 			return array;
 		}
@@ -364,6 +377,8 @@ namespace BoardGames
 	/// Lưu lại lịch sử các nước đi và cho phép Undo/ Redo.<br/>
 	/// Trạng thái bàn chơi chỉ được thay đổi thông qua Play, Undo và Redo
 	/// </summary>
+	/// <typeparam name="I">Kiểu của Player ID</typeparam>
+	/// <typeparam name="D">Kiểu của MoveData</typeparam>
 	public sealed class History<I, D> where I : struct, Enum where D : struct, IMoveData<I>
 	{
 		private readonly List<D> recentMoves = new();
