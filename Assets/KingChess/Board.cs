@@ -110,7 +110,7 @@ namespace BoardGames.KingChess
 		[SerializeField] private float pieceMoveSpeed;
 		public async UniTask OnPlayerMove(MoveType mode, MoveData data)
 		{
-			core.Move(data, mode);
+			core.Move(mode, data);
 
 			var from = data.from.ToMailBoxIndex();
 			var to = data.to.ToMailBoxIndex();

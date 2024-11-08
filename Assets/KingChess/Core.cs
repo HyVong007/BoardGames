@@ -708,7 +708,7 @@ namespace BoardGames.KingChess
 
 		private static readonly PieceName[] ALL_PIECE_NAMES = Enum.GetValues(typeof(PieceName)) as PieceName[];
 
-		public void Move(in MoveData data, MoveType mode)
+		public void Move(MoveType mode, in MoveData data )
 		{
 			bool undo = mode == MoveType.Undo;
 			PseudoMove(data, undo);

@@ -39,14 +39,7 @@ namespace BoardGames
 		}
 
 
-		private void OnEnable()
-		{
-			cancelDrag = new();
-			cancelLongPress = new();
-		}
-
-
-		private void OnDisable()
+		private void OnDestroy()
 		{
 			cancelDrag.Cancel();
 			cancelDrag.Dispose();

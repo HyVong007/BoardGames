@@ -15,24 +15,8 @@ namespace BoardGames
 {
 	public static class Util
 	{
-		/// <summary>
-		/// Luôn  lấy instance bằng lệnh: <code>using var obj = Cache&lt;T&gt;.Get();</code>
-		/// để đảm bảo obj dispose khi hết sử dụng
-		/// </summary>
-		private sealed class Cache<T> : IDisposable
+		private sealed class Cache<T> : CSObjectPool<Cache<T>>
 		{
-			#region object pool
-			private static readonly CSObjectPool<Cache<T>> pool = new();
-
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public static Cache<T> Get() => pool.Get();
-
-
-			[MethodImpl(MethodImplOptions.AggressiveInlining)]
-			public void Dispose() => pool.Recycle(this);
-			#endregion
-
 			public readonly List<T> list = new();
 		}
 
@@ -194,13 +178,12 @@ namespace BoardGames
 			var list = cache.list;
 			list.Clear();
 			list.AddRange(collection);
-			T item;
+			int index;
 
 			do
 			{
-				item = list[UnityEngine.Random.Range(0, list.Count)];
-				list.Remove(item);
-				yield return item;
+				yield return list[index = UnityEngine.Random.Range(0, list.Count)];
+				list.RemoveAt(index);
 			} while (list.Count != 0);
 		}
 	}
@@ -255,7 +238,7 @@ namespace BoardGames
 		{
 			this.prefab = prefab;
 			if (gameObject) this.gameObject = gameObject;
-			else this.gameObject = new() { name = $"{(this.prefab = prefab).name} Pool" };
+			else this.gameObject = new() { name = $"{prefab.name} Pool" };
 
 			if (hiddenAnchor) this.hiddenAnchor = hiddenAnchor;
 			else (this.hiddenAnchor = new GameObject { name = "Hidden" }.transform).SetParent(gameObject.transform);
@@ -274,6 +257,7 @@ namespace BoardGames
 				hiddenObj.RemoveAt(0);
 			}
 			else obj = UnityEngine.Object.Instantiate(prefab);
+
 			obj.transform.parent = visibleAnchor;
 			visibleObj.Add(obj);
 			obj.transform.position = position;
@@ -330,19 +314,22 @@ namespace BoardGames
 
 
 	/// <summary>
-	/// Method T.Dispose() phải gọi Recycle(<see langword="this"/>)
+	/// Khai báo: class ABC : CSObjectPool&lt;ABC&gt;<br/>
+	/// Nếu override Dispose() thì phải gọi <see langword="base"/>.Dispose()<para/>
+	/// CHÚ Ý: nên dùng <code><see langword="using"/> var abc = ABC.Get();</code>
+	/// để đảm bảo abc dispose khi hết sử dụng.
 	/// </summary>
-	/// <typeparam name="T"></typeparam>
-	public sealed class CSObjectPool<T> where T : class, IDisposable, new()
+	public abstract class CSObjectPool<T> : IDisposable where T : CSObjectPool<T>, new()
 	{
-		private readonly Stack<T> availables = new();
-
-		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public T Get() => availables.TryPop(out T obj) ? obj : new();
+		private static readonly Stack<T> availables = new();
 
 
 		[MethodImpl(MethodImplOptions.AggressiveInlining)]
-		public void Recycle(T obj) => availables.Push(obj);
+		public static T Get() => availables.TryPop(out T obj) ? obj : new();
+
+
+		[MethodImpl(MethodImplOptions.AggressiveInlining)]
+		public virtual void Dispose() => availables.Push(this as T);
 	}
 
 
